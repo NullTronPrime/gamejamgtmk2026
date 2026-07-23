@@ -22,8 +22,8 @@ const BOARD_SIZE := 8
 const SQUARE_COUNT := 64
 const LIGHT_COLOR := Color(0.94, 0.85, 0.70)
 const DARK_COLOR := Color(0.65, 0.44, 0.28)
-const HIGHLIGHT_COLOR := Color(0.3, 0.7, 0.3, 0.5)
-const CHECK_COLOR := Color(0.9, 0.2, 0.2, 0.6)
+const SELECTED_COLOR := Color(0.3, 0.7, 0.3, 0.5)
+const VALID_TARGET_COLOR := Color(0.15, 0.9, 0.15, 0.45)
 const CORRECT_COLOR := Color(0.2, 0.8, 0.2, 0.8)
 const WRONG_COLOR := Color(0.8, 0.15, 0.15, 0.8)
 
@@ -35,6 +35,7 @@ var correct_to: int = -1
 var _squares: Array[ColorRect] = []
 var _piece_labels: Array[Label] = []
 var _highlight: ColorRect
+var _valid_target: ColorRect
 var _result_overlay: ColorRect
 var _input_locked := false
 var _panel: Panel
@@ -55,7 +56,7 @@ func setup_puzzle(board_data: String, from_sq: int, to_sq: int) -> void:
 
 func _build_board() -> void:
 	_panel = Panel.new()
-	var style = StyleBoxFlat.new()
+	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.15, 0.10, 0.06)
 	style.corner_radius_top_left = 6
 	style.corner_radius_top_right = 6
@@ -67,10 +68,16 @@ func _build_board() -> void:
 	add_child(_panel)
 
 	_highlight = ColorRect.new()
-	_highlight.color = HIGHLIGHT_COLOR
+	_highlight.color = SELECTED_COLOR
 	_highlight.visible = false
 	_highlight.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_panel.add_child(_highlight)
+
+	_valid_target = ColorRect.new()
+	_valid_target.color = VALID_TARGET_COLOR
+	_valid_target.visible = false
+	_valid_target.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_panel.add_child(_valid_target)
 
 	_result_overlay = ColorRect.new()
 	_result_overlay.visible = false
@@ -78,30 +85,44 @@ func _build_board() -> void:
 	_result_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_panel.add_child(_result_overlay)
 
+	_build_squares()
+
+func _build_squares() -> void:
 	var sq_size := _square_size()
 	for row in BOARD_SIZE:
 		for col in BOARD_SIZE:
 			var idx := row * BOARD_SIZE + col
+			var pos := _square_pos(col, row)
+			var sz := Vector2(sq_size - 2, sq_size - 2)
+
 			var rect := ColorRect.new()
 			rect.color = LIGHT_COLOR if (row + col) % 2 == 0 else DARK_COLOR
-			rect.size = Vector2(sq_size, sq_size) * Vector2(1, 1) - Vector2(2, 2)
-			rect.position = Vector2(col * sq_size + 4, row * sq_size + 4)
+			rect.size = sz
+			rect.position = pos
 			rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			_panel.add_child(rect)
 			_squares.append(rect)
 
 			var label := Label.new()
-			label.size = rect.size
+			label.size = sz
 			label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 			label.add_theme_font_size_override("font_size", max(16, sq_size / 2))
 			label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			label.position = rect.position
+			label.position = pos
 			_panel.add_child(label)
 			_piece_labels.append(label)
 
+func _square_pos(col: int, row: int) -> Vector2:
+	var s := _square_size()
+	return Vector2(col * s + 4, row * s + 4)
+
+func _square_center(col: int, row: int) -> Vector2:
+	var s := _square_size()
+	return Vector2(col * s + s / 2.0, row * s + s / 2.0)
+
 func _square_size() -> float:
-	return min(size.x, size.y) / float(BOARD_SIZE) - 1.0
+	return min(size.x, size.y) / float(BOARD_SIZE)
 
 func _parse_board(data: String) -> Array[String]:
 	var result: Array[String] = []
@@ -113,7 +134,7 @@ func _parse_board(data: String) -> Array[String]:
 func _render_board() -> void:
 	var sq_size := _square_size()
 	for i in SQUARE_COUNT:
-		var piece: String = board[i] if i < board.size() else "."
+		var piece := board[i] if i < board.size() else "."
 		var label := _piece_labels[i]
 		if piece != "." and PIECES.has(piece):
 			var char_str := String.chr(PIECES[piece])
@@ -135,43 +156,65 @@ func _gui_input(event: InputEvent) -> void:
 		return
 
 	if event is InputEventMouseButton:
-		var mouse_pos := get_local_mouse_position()
 		if event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-			var sq := _pos_to_square(mouse_pos)
+			var sq := _pos_to_square(get_local_mouse_position())
 			if sq >= 0 and board[sq] != ".":
 				_dragging = true
 				_drag_from_sq = sq
-				_drag_start_pos = mouse_pos
+				_drag_start_pos = get_local_mouse_position()
 				_drag_label = _piece_labels[sq]
 				selected_sq = sq
-				_highlight.visible = true
-				var sq_size := _square_size()
-				var row := sq / BOARD_SIZE
-				var col := sq % BOARD_SIZE
-				_highlight.position = Vector2(col * sq_size + 2, row * sq_size + 2)
-				_highlight.size = Vector2(sq_size + 2, sq_size + 2)
+				_show_selection(sq)
+				if sq == correct_from:
+					_show_valid_target(correct_to)
 		elif not event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 			if _dragging:
 				_dragging = false
 				_drag_label.z_index = 0
-				var target_sq := _pos_to_square(mouse_pos)
-				if target_sq >= 0 and target_sq != _drag_from_sq and board[target_sq] == ".":
+				_highlight.visible = false
+				_valid_target.visible = false
+				var target_sq := _pos_to_square(get_local_mouse_position())
+				if target_sq >= 0 and target_sq != _drag_from_sq:
 					move_made.emit(_drag_from_sq, target_sq)
+					_snap_piece(_drag_from_sq, target_sq)
 					_check_move(_drag_from_sq, target_sq)
 				else:
 					selected_sq = -1
-					_highlight.visible = false
 					_update_layout()
 
 	if event is InputEventMouseMotion and _dragging:
-		var sq_size := _square_size()
-		_drag_label.position = get_local_mouse_position() - Vector2(sq_size / 2, sq_size / 2)
+		var s := _square_size()
+		_drag_label.position = get_local_mouse_position() - Vector2(s / 2.0, s / 2.0)
 		_drag_label.z_index = 10
+
+func _show_selection(sq: int) -> void:
+	var s := _square_size()
+	var col := sq % BOARD_SIZE
+	var row := sq / BOARD_SIZE
+	_highlight.position = _square_pos(col, row) - Vector2(2, 2)
+	_highlight.size = Vector2(s, s)
+	_highlight.visible = true
+
+func _show_valid_target(sq: int) -> void:
+	var s := _square_size()
+	var col := sq % BOARD_SIZE
+	var row := sq / BOARD_SIZE
+	_valid_target.position = _square_pos(col, row) - Vector2(1, 1)
+	_valid_target.size = Vector2(s - 2, s - 2)
+	_valid_target.visible = true
+
+func _snap_piece(from_sq: int, to_sq: int) -> void:
+	var col := to_sq % BOARD_SIZE
+	var row := to_sq / BOARD_SIZE
+	var s := _square_size()
+	var center := _square_center(col, row)
+	_piece_labels[from_sq].position = center - Vector2(s / 2.0, s / 2.0)
 
 func _pos_to_square(pos: Vector2) -> int:
 	var sq_size := _square_size()
-	var col := int((pos.x - 4.0) / sq_size)
-	var row := int((pos.y - 4.0) / sq_size)
+	var local := pos - Vector2(4, 4)
+	var col := int(local.x / sq_size)
+	var row := int(local.y / sq_size)
 	if col < 0 or col >= BOARD_SIZE or row < 0 or row >= BOARD_SIZE:
 		return -1
 	return row * BOARD_SIZE + col
@@ -181,8 +224,8 @@ func _update_layout() -> void:
 	for row in BOARD_SIZE:
 		for col in BOARD_SIZE:
 			var idx := row * BOARD_SIZE + col
-			var pos := Vector2(col * sq_size + 4, row * sq_size + 4)
-			var sz := Vector2(sq_size, sq_size) * Vector2(1, 1) - Vector2(2, 2)
+			var pos := _square_pos(col, row)
+			var sz := Vector2(sq_size - 2, sq_size - 2)
 			_squares[idx].position = pos
 			_squares[idx].size = sz
 			_piece_labels[idx].position = pos
@@ -210,17 +253,18 @@ func _check_move(from_sq: int, to_sq: int) -> void:
 
 func _build_move_animation(from_sq: int, to_sq: int) -> void:
 	_update_layout()
-	var fr := _piece_labels[from_sq]
-	var to := _piece_labels[to_sq]
-	if fr.text.is_empty():
+	var from_label := _piece_labels[from_sq]
+	var to_label := _piece_labels[to_sq]
+	if from_label.text.is_empty():
 		return
-	to.text = fr.text
-	fr.text = ""
-	var sq_size := _square_size()
-	var row := to_sq / BOARD_SIZE
+	to_label.text = from_label.text
+	from_label.text = ""
+	board[to_sq] = board[from_sq]
+	board[from_sq] = "."
 	var col := to_sq % BOARD_SIZE
-	to.position = Vector2(col * sq_size + 4, row * sq_size + 4)
-	to.size = Vector2(sq_size, sq_size)
+	var row := to_sq / BOARD_SIZE
+	to_label.position = _square_pos(col, row)
+	to_label.size = Vector2(_square_size() - 2, _square_size() - 2)
 	var tween := create_tween()
-	tween.tween_property(to, "scale", Vector2(1.15, 1.15), 0.15)
-	tween.tween_property(to, "scale", Vector2(1, 1), 0.15)
+	tween.tween_property(to_label, "scale", Vector2(1.15, 1.15), 0.15)
+	tween.tween_property(to_label, "scale", Vector2(1, 1), 0.15)

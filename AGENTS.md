@@ -27,12 +27,23 @@
 - Separate gravity for platformer vs isometric
 - Smooth acceleration (lerp-based) only in platformer scene
 
-### 7. Text replaced with "sample text"
+### 7. Humanoid rig + walk-cycle animation (`humanoid_rig.gd`, `player.gd`, `betaal.gd`)
+- New `scripts/shared/humanoid_rig.gd` — `HumanoidRig` class with static `build()` creating jointed stick figure (torso, head, 2-bone arms/legs)
+- `player.gd` replaced: Vikram uses rig with neutral gray/tan colors, walk cycle (legs swing opposite, knees bend, arms contralateral, speed scales with sprint, idle bob, airborne tuck)
+- `betaal.gd` replaced: Betaal is blue stick figure (scale 0.78) posed piggyback via `_pose_piggyback()`, all existing tween/speech/fly-away logic preserved
+
+### 8. Crossroad config (`config/crossroads.json`)
+- New `config/crossroads.json` — each crossroad has `"enabled": true/false`
+- `_load_crossroad_config()` reads JSON, `_is_crossroad_enabled()` helper
+- Disabled crossroads: invisible, no trigger, auto-skipped in progression
+- HUD minimap greys out disabled crossroad markers
+
+### 9. Text replaced with "sample text"
 - Title screen cutscene and intro scene texts → `"sample text"`
-- All 8 text-based riddle questions + consequences → `"sample text"`
+- All 8 text-based riddle questions, answers, and consequences → `"sample text"`
 - Chessboard riddles (3) kept unchanged (not text-based)
 
-### 8. Miro board riddles added (6 new)
+### 10. Miro board riddles added (6 new)
 Added after the 8 placeholders, with real riddle text from the Miro board:
 1. Suryamal's head vs body (theme: upside down)
 2. King Rupsen vs Virvar sacrifice (theme: duality)
@@ -41,11 +52,21 @@ Added after the 8 placeholders, with real riddle text from the Miro board:
 5. Will Nageshwari kill Prince Shaktinath (theme: snakes)
 6. Gloom forest level (placeholder — theme label only)
 
+### 11. Chessboard widget fixes (`chessboard_widget.gd`)
+- Valid-move highlight: when piece on `correct_from` is picked up, `correct_to` square lights up green
+- Snap-to-center: dropped piece snaps to target square center position
+- Cleaned up layout math, extracted `_square_pos()`/`_square_center()` helpers
+
+### 12. CanvasLayer skybox with 60s day/night cycle (`shaders/sky.gdshader`, `forest_level.gd`)
+- Sky moved to `CanvasLayer` (layer -10) so it always renders behind the world
+- New `shaders/sky.gdshader` — gradient sky (dark zenith → horizon), colors driven by `night_factor`/`sunset_glow` uniforms
+- StarField: 180 stars with per-star twinkle, screen-space coordinates on skybox layer
+- **Sun**: `SunCircle` class with warm glow/halo, arcs from left→center→right during day and sets at sunset
+- **Moon**: 3-layer circle (glow/halo/disc), arcs opposite the sun during night
+- Cycle: 60s total → 25s day → 10s sunset → 20s night → 5s dawn
+- Lights rotate and change color: warm at sunset, cool blue at night
+- Ambient energy dims during night, rises during day
+
 ## Data Sources Fetched
 - Miro board (`design/board.md`) — full board structure, 6 new riddles, art/sound/gameplay sections
 - Discord code-stuff channel — riddle type discussions (barber paradox, coin trick, observation Qs, chessboard)
-
-## Open Questions / Remaining Work
-- Discord riddles (barber paradox, coin-in-hand trick, moral dilemma, observation Qs) still need to be added as code if desired
-- Environment observation questions (how many? what color?) partially implemented in `forest_level.gd._add_new_environment_questions()` — needs data population
-- Mic/collection puzzle types unused

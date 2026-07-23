@@ -1,0 +1,10 @@
+{
+  "crossroads": [
+    { "index": 0, "enabled": false },
+    { "index": 1, "enabled": false },
+    { "index": 2, "enabled": false },
+    { "index": 3, "enabled": false },
+    { "index": 4, "enabled": false },
+    { "index": 5, "enabled": false }
+  ]
+}

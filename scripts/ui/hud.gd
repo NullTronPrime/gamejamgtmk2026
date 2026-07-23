@@ -45,9 +45,11 @@ func _init_track(forest: Node) -> void:
 	_track_end = last_pos.x + 500.0
 
 	for i in range(forest.crossroad_count):
+		var enabled = forest._is_crossroad_enabled(i) if forest.has_method("_is_crossroad_enabled") else true
 		var marker = ColorRect.new()
 		marker.size = Vector2(4, 14)
-		marker.color = Color(0.9, 0.2, 0.2, 1)
+		marker.color = Color(0.9, 0.2, 0.2, 1) if enabled else Color(0.3, 0.3, 0.3, 0.3)
+		marker.visible = enabled
 		$MinimapPanel.add_child(marker)
 		_crossroad_markers.append(marker)
 	_initialized = true

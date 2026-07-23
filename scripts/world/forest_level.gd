@@ -296,23 +296,34 @@ class CircleDraw extends Node2D:
 	func _draw():
 		draw_circle(Vector2.ZERO, radius, fill_color)
 
+class SunCircle extends Node2D:
+	var radius: float
+	func _draw():
+		draw_circle(Vector2.ZERO, radius, Color(1.0, 0.75, 0.15, 1.0))
+		draw_circle(Vector2.ZERO, radius * 0.6, Color(1.0, 0.95, 0.5, 1.0))
+
 class StarField extends Node2D:
 	var stars: Array[Dictionary] = []
 
 	func _ready():
 		var rng = RandomNumberGenerator.new()
 		rng.seed = 42
-		for i in 120:
+		for i in 60:
 			stars.append({
-				"x": rng.randf_range(-50000, 50000),
-				"y": rng.randf_range(-800, 400),
-				"r": rng.randf_range(0.5, 1.5),
-				"a": rng.randf_range(0.15, 0.6)
+				"x": rng.randf_range(-800, 800),
+				"y": rng.randf_range(-500, 100),
+				"r": rng.randf_range(0.8, 2.5),
+				"a": rng.randf_range(0.15, 0.8),
+				"phase": rng.randf_range(0.0, TAU),
+				"twinkle_speed": rng.randf_range(0.5, 3.0)
 			})
 
 	func _draw():
+		var time = Time.get_ticks_msec() / 1000.0
 		for s in stars:
-			draw_circle(Vector2(s.x, s.y), s.r, Color(1, 1, 1, s.a))
+			var twinkle = 0.6 + 0.4 * sin(time * s.twinkle_speed + s.phase)
+			var alpha = s.a * twinkle
+			draw_circle(Vector2(s.x, s.y), s.r, Color(1, 1, 1, alpha))
 
 const LEVEL_WIDTH = 8000
 const DEPTH_NEAR = 600
@@ -328,15 +339,16 @@ var reset_cutscene: CanvasLayer
 var current_riddle_data: Dictionary
 var current_shuffled_options: Array[Dictionary]
 var is_waiting_for_response: bool = false
-var _leaf_particles: GPUParticles2D
 var _generated_chunk_min: int = -25
 var _generated_chunk_max: int = 25
 var _chunk_idx_counter: int = 500
 const CHUNK_SIZE: float = 400.0
-const GENERATE_AHEAD: int = 4
+const GENERATE_AHEAD: int = 6
 var environment: EnvironmentTracker
 var observation: ObservationTracker
 var _observation_scan_timer: float = 0.0
+var _chunk_gen_timer: float = 0.0
+var _parallax_layers: Array[Dictionary] = []
 
 var platformer_scene: PackedScene
 var platformer_instance: Node
@@ -346,13 +358,25 @@ var crossroad_count: int = 6
 var crossroad_spacing: float = 2000.0
 var crossroad_start_x: float = 1200.0
 var current_crossroad_index: int = 0
+var _crossroad_enabled: Array[bool] = []
 var day_night_cycle_time: float = 0.0
-var day_duration: float = 85.7
 var _moonlight_node: Node
 var _ambient_node: Node
 
 @onready var puzzle_timer: Timer = $PuzzleTriggerTimer
 @onready var player_start: Marker2D = $PlayerStart
+
+var _skybox_layer: CanvasLayer
+var _sky_material: ShaderMaterial
+var _star_node: Node2D
+var _sun_node: Node2D
+var _moon_node: Node2D
+var _moon_disc: Node2D
+var _skybox_width: float = 1280.0
+var _skybox_height: float = 720.0
+const CYCLE_TOTAL: float = 60.0
+const SUN_OFFSET: float = 0.42
+const SUNSET_END: float = 0.58
 
 func _ready() -> void:
 	environment = EnvironmentTracker.new()
@@ -386,6 +410,8 @@ func _ready() -> void:
 	if ambience_stream:
 		AudioManager.play_ambience(ambience_stream)
 	_setup_lighting()
+	_load_crossroad_config()
+	_build_skybox()
 	_setup_crossroads()
 	GameManager.start_run()
 
@@ -403,56 +429,26 @@ func _process(delta: float) -> void:
 		var dist = abs(player_instance.position.x)
 		if dist > GameManager.max_distance:
 			GameManager.max_distance = dist
-	if _leaf_particles and player_instance:
-		_leaf_particles.position.x = player_instance.position.x
-		_leaf_particles.position.y = player_instance.position.y - 300
 	if player_instance:
-		_generate_props_ahead()
+		_chunk_gen_timer -= delta
+		if _chunk_gen_timer <= 0.0:
+			_generate_props_ahead()
+			_chunk_gen_timer = 0.15
+	var cam = player_instance.get_node_or_null("Camera2D") if player_instance else null
+	if cam:
+		var vh = _skybox_height * 0.5
+		var max_y = vh - 80.0
+		cam.offset.y = -max(0.0, player_instance.position.y - max_y)
+	if player_instance and not _parallax_layers.is_empty():
+		var px = player_instance.position.x
+		for l in _parallax_layers:
+			var spr = l["sprite"] as Sprite2D
+			var scroll = fmod(-px * l["factor"], l["tex_w"])
+			if scroll > 0: scroll -= l["tex_w"]
+			spr.position.x = scroll + l["tile_x"]
 
 func _build_terrain() -> void:
 	var TERRAIN_HALF = 50000
-	var sky = ColorRect.new()
-	sky.name = "Sky"
-	sky.offset_left = -TERRAIN_HALF
-	sky.offset_top = -800
-	sky.size = Vector2(TERRAIN_HALF * 2, 2000)
-	sky.color = Color(0.02, 0.02, 0.08)
-	add_child(sky)
-	move_child(sky, 0)
-
-	var sky_color = Color(0.02, 0.02, 0.08)
-
-	var star_field = StarField.new()
-	star_field.name = "Stars"
-	add_child(star_field)
-	move_child(star_field, 1)
-
-	var moon_node = Node2D.new()
-	moon_node.name = "MoonNode"
-	moon_node.position = Vector2(400, 80)
-
-	var moon_glow = CircleDraw.new()
-	moon_glow.name = "MoonGlow"
-	moon_glow.radius = 130
-	moon_glow.fill_color = Color(0.5, 0.6, 0.9, 0.08)
-	moon_node.add_child(moon_glow)
-
-	var moon_halo = CircleDraw.new()
-	moon_halo.name = "MoonHalo"
-	moon_halo.radius = 85
-	moon_halo.fill_color = Color(0.7, 0.8, 1.0, 0.15)
-	moon_node.add_child(moon_halo)
-
-	var moon_disc = CircleDraw.new()
-	moon_disc.name = "MoonDisc"
-	moon_disc.radius = 55
-	moon_disc.fill_color = Color(0.92, 0.92, 0.96, 0.95)
-	moon_node.add_child(moon_disc)
-
-	add_child(moon_node)
-	move_child(moon_node, 1)
-	for c in [moon_node, star_field]:
-		c.queue_redraw()
 
 	var dirt = ColorRect.new()
 	dirt.name = "Dirt"
@@ -484,13 +480,122 @@ func _build_terrain() -> void:
 	grass_bottom.color = Color(0.08, 0.18, 0.06)
 	add_child(grass_bottom)
 
+func _build_skybox() -> void:
+	var ws = DisplayServer.window_get_size()
+	_skybox_width = max(ws.x, 1280)
+	_skybox_height = max(ws.y, 720)
+	_skybox_layer = CanvasLayer.new()
+	_skybox_layer.layer = -8
+	add_child(_skybox_layer)
+
+	var sky_rect := ColorRect.new()
+	sky_rect.name = "SkyRect"
+	sky_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	sky_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_sky_material = ShaderMaterial.new()
+	_sky_material.shader = preload("res://shaders/sky.gdshader")
+	sky_rect.material = _sky_material
+	_skybox_layer.add_child(sky_rect)
+
+	_star_node = StarField.new()
+	_star_node.name = "Stars"
+	_star_node.modulate = Color(1, 1, 1, 0.0)
+	_skybox_layer.add_child(_star_node)
+
+	_sun_node = Node2D.new()
+	_sun_node.name = "SunNode"
+	_sun_node.modulate = Color(1, 1, 1, 0)
+
+	var sun_glow := CircleDraw.new()
+	sun_glow.name = "SunGlow"
+	sun_glow.radius = 180
+	sun_glow.fill_color = Color(1.0, 0.4, 0.0, 0.2)
+	_sun_node.add_child(sun_glow)
+
+	var sun_halo := CircleDraw.new()
+	sun_halo.name = "SunHalo"
+	sun_halo.radius = 100
+	sun_halo.fill_color = Color(1.0, 0.6, 0.05, 0.4)
+	_sun_node.add_child(sun_halo)
+
+	var sun_disc := SunCircle.new()
+	sun_disc.name = "SunDisc"
+	sun_disc.radius = 65
+	_sun_node.add_child(sun_disc)
+
+	_skybox_layer.add_child(_sun_node)
+
+	_moon_node = Node2D.new()
+	_moon_node.name = "MoonNode"
+	_moon_node.modulate = Color(1, 1, 1, 0)
+
+	var moon_glow := CircleDraw.new()
+	moon_glow.name = "MoonGlow"
+	moon_glow.radius = 160
+	moon_glow.fill_color = Color(0.5, 0.6, 0.9, 0.12)
+	_moon_node.add_child(moon_glow)
+
+	var moon_halo := CircleDraw.new()
+	moon_halo.name = "MoonHalo"
+	moon_halo.radius = 90
+	moon_halo.fill_color = Color(0.7, 0.8, 1.0, 0.25)
+	_moon_node.add_child(moon_halo)
+
+	_moon_disc = CircleDraw.new()
+	_moon_disc.name = "MoonDisc"
+	_moon_disc.radius = 55
+	_moon_disc.fill_color = Color(0.92, 0.92, 0.96, 0.95)
+	_moon_node.add_child(_moon_disc)
+
+	_skybox_layer.add_child(_moon_node)
+
+	for c in [_star_node, _sun_node, _moon_node]:
+		c.queue_redraw()
+	_add_parallax_backdrop()
+
+func _add_parallax_backdrop() -> void:
+	var pl := CanvasLayer.new()
+	pl.name = "ParallaxBackdrop"
+	pl.layer = -10
+	add_child(pl)
+
+	var layers = [
+		{ "tex": "tree_light_grey.png", "factor": 0.02, "scale": 0.15 },
+		{ "tex": "medium_grey_tree.png", "factor": 0.06, "scale": 0.20, "variant": "medium_grey_tree_two.png" },
+		{ "tex": "Dark_Tree.png", "factor": 0.14, "scale": 0.25, "variant": "Dark_Tree_two.png" },
+	]
+	_parallax_layers.clear()
+	var vs = DisplayServer.window_get_size()
+	var count = 10
+	for l in layers:
+		var tex = load("res://assets/sprites/background/" + l["tex"])
+		if not tex:
+			continue
+		var variant_tex = null
+		if l.has("variant"):
+			variant_tex = load("res://assets/sprites/background/" + l["variant"])
+		var sw = tex.get_size().x * l["scale"]
+		var sh = tex.get_size().y * l["scale"]
+		var base_y = vs.y * 0.4 - sh
+		for i in range(count):
+			var tex_to_use = tex
+			if variant_tex and randi() % 2 == 0:
+				tex_to_use = variant_tex
+			var spr := Sprite2D.new()
+			spr.texture = tex_to_use
+			spr.centered = false
+			spr.scale = Vector2.ONE * l["scale"]
+			spr.position = Vector2((i - 3) * sw, base_y)
+			pl.add_child(spr)
+			_parallax_layers.append({ "sprite": spr, "factor": l["factor"], "tex_w": sw, "tile_x": (i - 3) * sw })
+
 func _generate_forest() -> void:
 	var props = Node2D.new()
 	props.name = "ForestProps"
 	props.y_sort_enabled = true
 	add_child(props)
-	_generated_chunk_min = -1
-	_generated_chunk_max = 1
+	_generated_chunk_min = -3
+	_generated_chunk_max = 3
 	_chunk_idx_counter = 500
 	for ci in range(_generated_chunk_min, _generated_chunk_max + 1):
 		_generate_chunk(ci)
@@ -503,12 +608,16 @@ func _generate_chunk(ci: int) -> void:
 	rng.seed = hash("diagonal_forest_%d" % ci)
 	var cx = ci * CHUNK_SIZE
 
-	if rng.randf() < 0.08:
-		var gx = cx + rng.randf_range(-100, 100)
-		var gy = DEPTH_FAR + rng.randf_range(0.3, 0.7) * (DEPTH_NEAR - DEPTH_FAR)
+	var giant_chance = rng.randf()
+	if giant_chance < 0.10:
+		var gx = cx + rng.randf_range(-120, 120)
+		var gy = DEPTH_FAR + rng.randf_range(0.25, 0.75) * (DEPTH_NEAR - DEPTH_FAR)
 		var gt = (gy - DEPTH_FAR) / max(1.0, DEPTH_NEAR - DEPTH_FAR)
 		_chunk_idx_counter += 1
-		_build_tree(props, "GiantTree_%d" % _chunk_idx_counter, gx, gy, Color(0.12, 0.35, 0.08), rng.randf_range(40, 60), rng.randf_range(280, 350), 0, rng.randf_range(-3.0, 3.0))
+		var giant_w = rng.randf_range(100, 150)
+		var giant_h = rng.randf_range(550, 800)
+		var giant_variant = rng.randi() % 3
+		_build_tree(props, "GiantTree_%d" % _chunk_idx_counter, gx, gy, Color(0.12, 0.35, 0.08), giant_w, giant_h, giant_variant, rng.randf_range(-3.0, 3.0))
 		environment.register_tree("GiantTree_%d" % _chunk_idx_counter, gx, gy, gt)
 		observation.register_object("GiantTree_%d" % _chunk_idx_counter, Vector2(gx, gy), "tree")
 
@@ -518,10 +627,10 @@ func _generate_chunk(ci: int) -> void:
 		var ty = DEPTH_FAR + t * (DEPTH_NEAR - DEPTH_FAR)
 		var path_w = lerp(200.0, 800.0, t)
 		var side = 1.0 if rng.randi() % 2 == 0 else -1.0
-		var dist = path_w / 2 + rng.randf_range(20, 140)
+		var dist = path_w / 2 + rng.randf_range(30, 180)
 		var tx = cx + side * dist
-		var th = rng.randf_range(80, 250)
-		var tw = rng.randf_range(15, 50)
+		var th = rng.randf_range(150, 450)
+		var tw = rng.randf_range(35, 90)
 		var variant = rng.randi() % 5
 		var green_palette = [Color(0.06, 0.25, 0.05), Color(0.08, 0.3, 0.06), Color(0.1, 0.2, 0.04), Color(0.05, 0.35, 0.07), Color(0.12, 0.28, 0.03)]
 		var autumn_palette = [Color(0.6, 0.25, 0.05), Color(0.7, 0.35, 0.08), Color(0.5, 0.15, 0.02), Color(0.65, 0.4, 0.1), Color(0.55, 0.2, 0.04), Color(0.8, 0.45, 0.05)]
@@ -545,9 +654,9 @@ func _generate_chunk(ci: int) -> void:
 	for i in bush_count:
 		var t = rng.randf_range(0.0, 1.0)
 		var by = DEPTH_FAR + t * (DEPTH_NEAR - DEPTH_FAR)
-		var bw = rng.randf_range(20, 35)
-		var bh = rng.randf_range(15, 25)
-		var bx = cx + rng.randf_range(-200, 200)
+		var bw = rng.randf_range(25, 45)
+		var bh = rng.randf_range(18, 35)
+		var bx = cx + rng.randf_range(-300, 300)
 		_chunk_idx_counter += 1
 		var bush_name = "Bush_%d" % _chunk_idx_counter
 		_build_rect_prop(props, bush_name, bx, by, Color(0.1, 0.3, 0.08), bw, bh)
@@ -558,22 +667,35 @@ func _generate_chunk(ci: int) -> void:
 	for i in rock_count:
 		var t = rng.randf_range(0.1, 0.9)
 		var ry = DEPTH_FAR + t * (DEPTH_NEAR - DEPTH_FAR)
-		var rs = rng.randf_range(10, 20)
-		var rx = cx + rng.randf_range(-300, 300)
+		var rs = rng.randf_range(12, 30)
+		var rx = cx + rng.randf_range(-350, 350)
 		_chunk_idx_counter += 1
 		var rock_name = "Rock_%d" % _chunk_idx_counter
 		_build_rect_prop(props, rock_name, rx, ry, Color(0.25, 0.22, 0.18), rs, rs * 0.5)
 		environment.register_rock(rock_name, rx)
 		observation.register_object(rock_name, Vector2(rx, ry), "rock")
+	
+	var shrub_count = rng.randi_range(0, 1)
+	for i in shrub_count:
+		var t = rng.randf_range(0.0, 1.0)
+		var sy = DEPTH_FAR + t * (DEPTH_NEAR - DEPTH_FAR)
+		var sw = rng.randf_range(12, 22)
+		var sh = rng.randf_range(10, 18)
+		var sx = cx + rng.randf_range(-250, 250)
+		_chunk_idx_counter += 1
+		var shrub_name = "Shrub_%d" % _chunk_idx_counter
+		_build_rect_prop(props, shrub_name, sx, sy, Color(0.08, 0.22, 0.06), sw, sh)
+		environment.register_bush(shrub_name)
+		observation.register_object(shrub_name, Vector2(sx, sy), "bush")
 
 func _generate_props_ahead() -> void:
 	if not player_instance:
 		return
 	var player_chunk = int(floor(player_instance.position.x / CHUNK_SIZE))
-	while player_chunk + GENERATE_AHEAD > _generated_chunk_max:
+	if player_chunk + GENERATE_AHEAD > _generated_chunk_max:
 		_generated_chunk_max += 1
 		_generate_chunk(_generated_chunk_max)
-	while player_chunk - GENERATE_AHEAD < _generated_chunk_min:
+	elif player_chunk - GENERATE_AHEAD < _generated_chunk_min:
 		_generated_chunk_min -= 1
 		_generate_chunk(_generated_chunk_min)
 
@@ -586,7 +708,10 @@ func _build_tree(parent: Node2D, tree_name: String, x: float, y: float, color: C
 	var tree = Plant2D.new()
 	var depth_t = clamp((y - DEPTH_FAR) / max(1.0, DEPTH_NEAR - DEPTH_FAR), 0.0, 1.0)
 	var is_far = depth_t < 0.4
-	var is_dark = (color.r + color.g + color.b) / 3.0 < 0.2
+
+	# near: 4 steps for good leaf coverage, far: 3 steps (small, minimal detail)
+	var steps = 3 if is_far else 4
+	var leaf_start = 2 if is_far else 3
 
 	match variant:
 		0:
@@ -599,11 +724,8 @@ func _build_tree(parent: Node2D, tree_name: String, x: float, y: float, color: C
 				r["D"] = "E"
 				r["E"] = "[--l]fD"
 				tree.rules = r
-				tree.max_steps = 5
-				tree.current_step = 5
-				tree.branch_length = clamp(h / 12.0, 5.0, 20.0)
 				tree.angle = 26.0
-				tree.leaf_growth_threshold = 5.0
+				tree.branch_length = clamp(h / 12.0, 5.0, 20.0)
 				tree.leaf_color = Color(color.r * 0.6, color.g * 0.7, color.b * 0.6)
 				tree.leaf_scale = clamp(w / 20.0, 0.5, 2.0)
 			else:
@@ -613,24 +735,18 @@ func _build_tree(parent: Node2D, tree_name: String, x: float, y: float, color: C
 				r["Y"] = "fB"
 				r["B"] = "[--l++++l][+X]fA"
 				tree.rules = r
-				tree.max_steps = 6
-				tree.current_step = 6
-				tree.branch_length = clamp(h / 15.0, 6.0, 18.0)
 				tree.angle = 30.0
-				tree.leaf_growth_threshold = 9.0
+				tree.branch_length = clamp(h / 15.0, 6.0, 40.0)
 				tree.leaf_color = color
-				tree.leaf_scale = clamp(w / 25.0, 0.8, 2.5)
+				tree.leaf_scale = clamp(w / 25.0, 0.8, 5.0)
 		1:
 			var r: Dictionary[String, String] = {}
 			r["X"] = "f[+l][-l]"
 			tree.rules = r
-			tree.max_steps = 6
-			tree.current_step = 6
 			tree.angle = 20.0
-			tree.branch_length = clamp(h / 5.0, 10.0, 35.0)
-			tree.leaf_growth_threshold = 10.0
+			tree.branch_length = clamp(h / 5.0, 10.0, 60.0)
 			tree.leaf_color = color
-			tree.leaf_scale = clamp(w / 12.0, 1.2, 3.5)
+			tree.leaf_scale = clamp(w / 12.0, 1.2, 6.0)
 		2:
 			if is_far:
 				var r: Dictionary[String, String] = {}
@@ -638,11 +754,8 @@ func _build_tree(parent: Node2D, tree_name: String, x: float, y: float, color: C
 				r["A"] = "fB"
 				r["B"] = "[+l][-l]"
 				tree.rules = r
-				tree.max_steps = 5
-				tree.current_step = 5
-				tree.branch_length = clamp(h / 10.0, 6.0, 22.0)
 				tree.angle = 35.0
-				tree.leaf_growth_threshold = 4.0
+				tree.branch_length = clamp(h / 10.0, 6.0, 22.0)
 				tree.leaf_color = Color(color.r * 0.6, color.g * 0.7, color.b * 0.6)
 				tree.leaf_scale = clamp(w / 20.0, 0.5, 2.0)
 			else:
@@ -651,13 +764,10 @@ func _build_tree(parent: Node2D, tree_name: String, x: float, y: float, color: C
 				r["A"] = "[--l][++l]fB"
 				r["B"] = "[--l][++l]"
 				tree.rules = r
-				tree.max_steps = 6
-				tree.current_step = 6
-				tree.branch_length = clamp(h / 12.0, 8.0, 25.0)
 				tree.angle = 35.0
-				tree.leaf_growth_threshold = 7.0
+				tree.branch_length = clamp(h / 12.0, 8.0, 50.0)
 				tree.leaf_color = color
-				tree.leaf_scale = clamp(w / 22.0, 0.8, 2.5)
+				tree.leaf_scale = clamp(w / 22.0, 0.8, 5.0)
 		3:
 			if is_far:
 				var r: Dictionary[String, String] = {}
@@ -666,11 +776,8 @@ func _build_tree(parent: Node2D, tree_name: String, x: float, y: float, color: C
 				r["B"] = "f[+l][-l]C"
 				r["C"] = "f[+l][-l]"
 				tree.rules = r
-				tree.max_steps = 5
-				tree.current_step = 5
-				tree.branch_length = clamp(h / 14.0, 4.0, 14.0)
 				tree.angle = 28.0
-				tree.leaf_growth_threshold = 6.0
+				tree.branch_length = clamp(h / 14.0, 4.0, 14.0)
 				tree.leaf_color = Color(color.r * 0.7, color.g * 0.8, color.b * 0.7)
 				tree.leaf_scale = clamp(w / 18.0, 0.8, 2.5)
 			else:
@@ -680,13 +787,10 @@ func _build_tree(parent: Node2D, tree_name: String, x: float, y: float, color: C
 				r["B"] = "[--l++++l][++l][--l]fC"
 				r["C"] = "[--l++++l][++l][--l]"
 				tree.rules = r
-				tree.max_steps = 6
-				tree.current_step = 6
-				tree.branch_length = clamp(h / 18.0, 5.0, 14.0)
 				tree.angle = 25.0
-				tree.leaf_growth_threshold = 10.0
+				tree.branch_length = clamp(h / 18.0, 5.0, 30.0)
 				tree.leaf_color = color
-				tree.leaf_scale = clamp(w / 20.0, 1.0, 3.0)
+				tree.leaf_scale = clamp(w / 20.0, 1.0, 5.0)
 		4:
 			if is_far:
 				var r: Dictionary[String, String] = {}
@@ -694,11 +798,8 @@ func _build_tree(parent: Node2D, tree_name: String, x: float, y: float, color: C
 				r["A"] = "[+k]f[-k]f[B]"
 				r["B"] = "[+l]f[-l]"
 				tree.rules = r
-				tree.max_steps = 5
-				tree.current_step = 5
-				tree.branch_length = clamp(h / 11.0, 5.0, 18.0)
 				tree.angle = 40.0
-				tree.leaf_growth_threshold = 4.0
+				tree.branch_length = clamp(h / 11.0, 5.0, 18.0)
 				tree.leaf_color = Color(color.r * 0.5, color.g * 0.6, color.b * 0.5)
 				tree.leaf_scale = clamp(w / 22.0, 0.4, 1.8)
 			else:
@@ -710,42 +811,41 @@ func _build_tree(parent: Node2D, tree_name: String, x: float, y: float, color: C
 				r["B"] = "[+Y]f[-Z]fC"
 				r["C"] = "[--l][++l]"
 				tree.rules = r
-				tree.max_steps = 6
-				tree.current_step = 6
-				tree.branch_length = clamp(h / 13.0, 6.0, 20.0)
 				tree.angle = 38.0
-				tree.leaf_growth_threshold = 8.0
+				tree.branch_length = clamp(h / 13.0, 6.0, 40.0)
 				tree.leaf_color = color
-				tree.leaf_scale = clamp(w / 24.0, 0.6, 2.0)
+				tree.leaf_scale = clamp(w / 24.0, 0.6, 4.0)
+
+	tree.max_steps = steps
+	tree.current_step = steps
+	tree.leaf_growth_threshold = leaf_start
 
 	var branch_shade = Color(0.2 + color.r * 0.15, 0.12 + color.g * 0.1, 0.06 + color.b * 0.05)
-	tree.branch_width = clamp(w * 0.08, 1.0, 4.0)
+	tree.branch_width = clamp(w * 0.08, 1.0, 6.0)
 	tree.branch_color = branch_shade
 	tree.wind_strength = randf_range(0.0, 0.05)
 
 	node.add_child(tree)
+
+	var body = StaticBody2D.new()
+	body.name = "Collision"
+	var shape = CollisionShape2D.new()
+	var rect = RectangleShape2D.new()
+	rect.size = Vector2(w * 0.3, h * 0.15)
+	shape.shape = rect
+	shape.position = Vector2(0, -h * 0.05)
+	body.add_child(shape)
+	node.add_child(body)
+
 	_make_lit(tree)
 	parent.add_child(node)
-
-	var occluder = LightOccluder2D.new()
-	var poly = OccluderPolygon2D.new()
-	var pad = w * 0.3
-	var top_y = -h * 0.8
-	poly.polygon = PackedVector2Array([
-		Vector2(-w / 2 - pad, top_y),
-		Vector2(w / 2 + pad, top_y),
-		Vector2(w / 2 + pad, 0),
-		Vector2(-w / 2 - pad, 0)
-	])
-	occluder.occluder = poly
-	node.add_child(occluder)
 
 func _build_rect_prop(parent: Node2D, prop_name: String, x: float, y: float, color: Color, w: float, h: float) -> void:
 	var node = Node2D.new()
 	node.name = prop_name
 	node.position = Vector2(x, y)
 
-	if prop_name.begins_with("Bush"):
+	if prop_name.begins_with("Bush") or prop_name.begins_with("Shrub"):
 		var bush_draw = BushDraw.new()
 		bush_draw.bush_color = color
 		bush_draw.bush_width = w
@@ -761,6 +861,16 @@ func _build_rect_prop(parent: Node2D, prop_name: String, x: float, y: float, col
 		rock_draw.offset_y = -h
 		node.add_child(rock_draw)
 		_make_lit(rock_draw)
+
+	var body = StaticBody2D.new()
+	body.name = "Collision"
+	var shape = CollisionShape2D.new()
+	var rect = RectangleShape2D.new()
+	rect.size = Vector2(w * 0.6, h * 0.4)
+	shape.shape = rect
+	shape.position = Vector2(0, -h * 0.3)
+	body.add_child(shape)
+	node.add_child(body)
 
 	parent.add_child(node)
 
@@ -939,7 +1049,12 @@ func _on_crossroad_trigger_entered(body: Node2D, crossroad_idx: int) -> void:
 		return
 	if completed_crossroads.has(crossroad_idx):
 		return
-	var trigger_node = crossroad_markers[crossroad_idx].get_node_or_null("CenterDot")
+	if not _is_crossroad_enabled(crossroad_idx):
+		return
+	var marker_node = crossroad_markers[crossroad_idx] if crossroad_idx < crossroad_markers.size() else null
+	if not marker_node:
+		return
+	var trigger_node = marker_node.get_node_or_null("CenterDot")
 	if trigger_node:
 		trigger_node.set_deferred("monitoring", false)
 	_trigger_betaal_riddle()
@@ -953,10 +1068,11 @@ func _trigger_betaal_riddle() -> void:
 
 	if current_crossroad_index < crossroad_markers.size():
 		var mk = crossroad_markers[current_crossroad_index]
-		mk.modulate = Color(1, 1, 1, 0)
-		mk.visible = true
-		var reveal = create_tween()
-		reveal.tween_property(mk, "modulate", Color(1, 1, 1, 1), 0.6).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+		if mk:
+			mk.modulate = Color(1, 1, 1, 0)
+			mk.visible = true
+			var reveal = create_tween()
+			reveal.tween_property(mk, "modulate", Color(1, 1, 1, 1), 0.6).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
 
 	GameManager.trigger_puzzle()
 	GameManager.puzzle_type_changed.emit(current_riddle_data.get("puzzle_type", 0))
@@ -1075,40 +1191,37 @@ func _add_leaf_particles() -> void:
 		return
 	var particles = GPUParticles2D.new()
 	particles.name = "LeafParticles"
-	particles.position = Vector2(0, -100)
+	particles.position = Vector2(0, -200)
 	particles.z_index = 1
-	particles.amount = 20
+	particles.amount = 8
 	particles.lifetime = 8.0
-	particles.explosiveness = 0.2
-	particles.randomness = 0.6
+	particles.explosiveness = 0.0
+	particles.randomness = 0.4
 	particles.one_shot = false
 	particles.preprocess = 4.0
-	particles.visibility_rect = Rect2(-2000, -500, 4000, 1500)
+	particles.visibility_rect = Rect2(-600, -300, 1200, 1200)
 	particles.trail_enabled = false
 
 	var material = ParticleProcessMaterial.new()
 	material.particle_flag_align_y = true
 	material.direction = Vector3(0.0, 1.0, 0.0)
-	material.spread = 150.0
-	material.gravity = Vector3(0.0, 3.0, 0.0)
-	material.initial_velocity_min = 5.0
-	material.initial_velocity_max = 15.0
-	material.angular_velocity_min = -180.0
-	material.angular_velocity_max = 180.0
-	material.orbit_velocity_min = 2.0
-	material.orbit_velocity_max = 8.0
-	material.scale_min = 0.05
-	material.scale_max = 0.2
-	material.color = Color(0.15, 0.65, 0.1, 0.7)
+	material.spread = 180.0
+	material.gravity = Vector3(0.0, 1.5, 0.0)
+	material.initial_velocity_min = 3.0
+	material.initial_velocity_max = 8.0
+	material.angular_velocity_min = -120.0
+	material.angular_velocity_max = 120.0
+	material.scale_min = 0.08
+	material.scale_max = 0.18
+	material.color = Color(0.15, 0.65, 0.1, 0.5)
 	var color_ramp = Gradient.new()
-	color_ramp.colors = PackedColorArray([Color(0.2, 0.8, 0.15, 0.8), Color(0.1, 0.5, 0.1, 0.5), Color(0.3, 0.7, 0.15, 0.2)])
+	color_ramp.colors = PackedColorArray([Color(0.2, 0.8, 0.15, 0.6), Color(0.1, 0.5, 0.1, 0.3), Color(0.3, 0.7, 0.15, 0.1)])
 	material.color_ramp = color_ramp
 	material.hue_variation_min = -0.1
 	material.hue_variation_max = 0.1
 	particles.process_material = material
 	particles.texture = leaf_texture
 	add_child(particles)
-	_leaf_particles = particles
 
 func _add_leaf_litter() -> void:
 	var leaf_texture = load("res://addons/PlantGenerator/Assets/leaf.png")
@@ -1142,13 +1255,41 @@ func _add_leaf_litter() -> void:
 func _get_crossroad_position(idx: int) -> Vector2:
 	return Vector2(crossroad_start_x + idx * crossroad_spacing, lerp(200.0, 80.0, float(idx) / float(crossroad_count - 1)))
 
+func _load_crossroad_config() -> void:
+	var path = "res://config/crossroads.json"
+	var file = FileAccess.open(path, FileAccess.READ)
+	if file:
+		var json_string = file.get_as_text()
+		var parsed = JSON.parse_string(json_string)
+		if parsed is Dictionary and parsed.has("crossroads"):
+			var arr = parsed["crossroads"] as Array
+			_crossroad_enabled.resize(crossroad_count)
+			for entry in arr:
+				if entry is Dictionary and entry.has("index"):
+					var idx = int(entry["index"])
+					if idx >= 0 and idx < crossroad_count:
+						_crossroad_enabled[idx] = bool(entry.get("enabled", false))
+	file.close()
+
+func _is_crossroad_enabled(idx: int) -> bool:
+	if idx < 0 or idx >= _crossroad_enabled.size():
+		return true
+	return _crossroad_enabled[idx]
+
 func _setup_crossroads() -> void:
-	_generate_crossroad(0)
+	for i in range(crossroad_count):
+		if _is_crossroad_enabled(i):
+			_generate_crossroad(i)
+			return
 
 func _generate_crossroad(idx: int) -> void:
 	if idx >= crossroad_count:
 		return
 	if idx < crossroad_markers.size():
+		return
+
+	if not _is_crossroad_enabled(idx):
+		crossroad_markers.append(null)
 		return
 
 	var p = _get_crossroad_position(idx)
@@ -1248,6 +1389,8 @@ func _light_crossroad(outcome_difficulty: int) -> void:
 	if idx < 0 or idx >= crossroad_markers.size():
 		return
 	var marker = crossroad_markers[idx]
+	if not marker:
+		return
 	var center_dot = marker.get_node_or_null("CenterDot")
 	if not center_dot:
 		return
@@ -1293,17 +1436,21 @@ func _mark_crossroad_completed() -> void:
 		return
 	if current_crossroad_index < crossroad_markers.size():
 		var marker = crossroad_markers[current_crossroad_index]
-		var center_dot = marker.get_node_or_null("CenterDot")
-		var dot_visual = center_dot.get_node_or_null("DotVisual") if center_dot else null
-		if dot_visual:
-			dot_visual.color = Color(0.15, 0.85, 0.15, 0.95)
-		for child in marker.get_children():
-			if child.name == "Glow" or child.name == "ForkLabel":
-				continue
-			if child is ColorRect:
-				child.color = Color(0.2, 0.7, 0.15, 0.6)
+		if marker:
+			var center_dot = marker.get_node_or_null("CenterDot")
+			var dot_visual = center_dot.get_node_or_null("DotVisual") if center_dot else null
+			if dot_visual:
+				dot_visual.color = Color(0.15, 0.85, 0.15, 0.95)
+			for child in marker.get_children():
+				if child.name == "Glow" or child.name == "ForkLabel":
+					continue
+				if child is ColorRect:
+					child.color = Color(0.2, 0.7, 0.15, 0.6)
 	completed_crossroads.append(current_crossroad_index)
 	current_crossroad_index += 1
+	while current_crossroad_index < crossroad_count and not _is_crossroad_enabled(current_crossroad_index):
+		completed_crossroads.append(current_crossroad_index)
+		current_crossroad_index += 1
 	_generate_crossroad(current_crossroad_index)
 
 func _load_platformer_level() -> void:
@@ -1350,15 +1497,120 @@ func _update_day_night(delta: float) -> void:
 	if not _moonlight_node:
 		return
 	day_night_cycle_time += delta
-	var total_cycle = day_duration * 14.0
-	var cycle_progress = fmod(day_night_cycle_time, total_cycle) / total_cycle
-	var angle = cycle_progress * TAU
-	var intensity = 0.3 + 0.7 * (0.5 + 0.5 * cos(angle))
-	if _moonlight_node.has_method("set_energy"):
-		_moonlight_node.energy = intensity * 3.5
-	var amb_intensity = 0.05 + 0.15 * (0.5 + 0.5 * cos(angle + PI))
+	var cycle_progress = fmod(day_night_cycle_time, CYCLE_TOTAL) / CYCLE_TOTAL
+
+	var night_factor: float
+	var sunset_glow: float
+	if cycle_progress < SUN_OFFSET:
+		night_factor = 0.0
+		sunset_glow = 0.0
+	elif cycle_progress < SUNSET_END:
+		var dusk_t = (cycle_progress - SUN_OFFSET) / (SUNSET_END - SUN_OFFSET)
+		night_factor = dusk_t
+		sunset_glow = sin(dusk_t * PI)
+	else:
+		night_factor = 1.0
+		sunset_glow = 0.0
+
+	if _sky_material:
+		_sky_material.set_shader_parameter("night_factor", night_factor)
+		_sky_material.set_shader_parameter("sunset_glow", sunset_glow)
+
+	var star_alpha = clamp((night_factor - 0.3) / 0.3, 0.0, 1.0) if night_factor > 0.3 else 0.0
+	if _star_node:
+		_star_node.modulate = Color(1, 1, 1, star_alpha)
+		_star_node.queue_redraw()
+
+	var cam_y = player_instance.position.y if player_instance else _skybox_height * 0.3
+	var cam = player_instance.get_node_or_null("Camera2D") if player_instance else null
+	if cam:
+		cam_y = player_instance.position.y + cam.offset.y
+	var view_half = _skybox_height * 0.5
+	var terrain_top_screen = 0.0 - cam_y + view_half
+	var sky_top = clamp(terrain_top_screen * 0.12, 8.0, _skybox_height * 0.4)
+	var sky_horizon = clamp(terrain_top_screen - 20.0, sky_top + 30.0, _skybox_height * 0.5)
+
+	var hw = _skybox_width * 0.5
+	var mid_x = hw
+
+	var sun_alpha: float
+	var sun_x: float
+	var sun_y: float
+	if cycle_progress < SUNSET_END + 0.06:
+		var sun_t = cycle_progress / (SUNSET_END + 0.06)
+		sun_t = clamp(sun_t, 0.0, 1.0)
+		sun_alpha = 1.0
+		if sun_t > 0.9:
+			sun_alpha = 1.0 - (sun_t - 0.9) / 0.1
+		var sun_arc_angle = sun_t * PI - PI * 0.5
+		sun_x = mid_x + sin(sun_arc_angle) * hw * 0.55
+		sun_y = sky_horizon - (cos(sun_arc_angle) * 0.5 + 0.5) * (sky_horizon - sky_top) * 0.9
+	else:
+		sun_alpha = 0.0
+		sun_x = _skybox_width + 200
+		sun_y = sky_horizon
+	if _sun_node:
+		_sun_node.position = Vector2(sun_x, sun_y)
+		_sun_node.modulate = Color(1, 1, 1, sun_alpha)
+
+	var moon_alpha: float
+	var moon_x: float
+	var moon_y: float
+	if cycle_progress > SUN_OFFSET - 0.05:
+		var moon_start = SUN_OFFSET - 0.05
+		var moon_duration = 1.0 - moon_start
+		var moon_t = clamp((cycle_progress - moon_start) / moon_duration, 0.0, 1.0)
+		moon_alpha = 0.0
+		if moon_t < 0.15:
+			moon_alpha = moon_t / 0.15
+		elif moon_t > 0.85:
+			moon_alpha = 1.0 - (moon_t - 0.85) / 0.15
+		else:
+			moon_alpha = 1.0
+		var moon_arc = moon_t * PI - PI * 0.5
+		moon_x = mid_x + sin(moon_arc) * hw * 0.55
+		moon_y = sky_top + 20.0 + (1.0 - cos(moon_arc)) * 0.5 * (sky_horizon - sky_top) * 0.7
+	else:
+		moon_alpha = 0.0
+		moon_x = -200
+		moon_y = sky_top
+	if _moon_node:
+		_moon_node.position = Vector2(moon_x, moon_y)
+		_moon_node.modulate = Color(1, 1, 1, moon_alpha)
+
+	var light_angle: float
+	var light_color: Color
+	if cycle_progress < SUN_OFFSET:
+		var day_t = cycle_progress / SUN_OFFSET
+		light_angle = lerp(-60.0, -10.0, day_t)
+		light_color = Color(1.0, 0.95, 0.85)
+		if _moonlight_node:
+			_moonlight_node.energy = lerp(2.0, 3.5, day_t)
+	elif cycle_progress < SUNSET_END:
+		var dusk_t = (cycle_progress - SUN_OFFSET) / (SUNSET_END - SUN_OFFSET)
+		light_angle = lerp(-10.0, 50.0, dusk_t)
+		light_color = Color(1.0, lerp(0.95, 0.4, dusk_t), lerp(0.85, 0.15, dusk_t))
+		if _moonlight_node:
+			_moonlight_node.energy = lerp(3.5, 0.8, dusk_t)
+	else:
+		var night_t = (cycle_progress - SUNSET_END) / (1.0 - SUNSET_END)
+		light_angle = lerp(50.0, -60.0, night_t)
+		light_color = Color(0.55, 0.65, 0.95)
+		if _moonlight_node:
+			_moonlight_node.energy = lerp(0.8, 2.5, night_t)
+	if _moonlight_node:
+		_moonlight_node.rotation = deg_to_rad(light_angle)
+		_moonlight_node.color = light_color
+
+	var amb_energy: float
+	if cycle_progress < SUN_OFFSET:
+		amb_energy = lerp(0.25, 0.08, cycle_progress / SUN_OFFSET)
+	elif cycle_progress < SUNSET_END:
+		amb_energy = lerp(0.08, 0.015, (cycle_progress - SUN_OFFSET) / (SUNSET_END - SUN_OFFSET))
+	else:
+		amb_energy = lerp(0.015, 0.06, (cycle_progress - SUNSET_END) / (1.0 - SUNSET_END))
 	if _ambient_node and _ambient_node.has_method("set_ambient_energy"):
-		_ambient_node.ambient_energy = amb_intensity
+		_ambient_node.ambient_energy = amb_energy
 
 func _make_lit(item: CanvasItem) -> void:
 	var shader = load("res://addons/lit/shaders/lit_receiver_fast.gdshader")
@@ -1380,17 +1632,15 @@ func _setup_lighting() -> void:
 	_moonlight_node = LitDirectionalLight2D.new()
 	_moonlight_node.color = Color(0.55, 0.65, 0.95)
 	_moonlight_node.energy = 3.5
-	_moonlight_node.shadow_enabled = true
-	_moonlight_node.shadow_color = Color(0, 0, 0, 0.9)
-	_moonlight_node.shadow_hardness = 0.5
+	_moonlight_node.shadow_enabled = false
 	_moonlight_node.rotation = deg_to_rad(-35)
 	add_child(_moonlight_node)
 
 	var pp = LitPostProcess.new()
 	pp.bloom_enabled = true
-	pp.bloom_threshold = 0.3
-	pp.bloom_intensity = 0.3
-	pp.bloom_radius = 2.0
+	pp.bloom_threshold = 0.4
+	pp.bloom_intensity = 0.15
+	pp.bloom_radius = 0.5
 	pp.grade_enabled = true
 	pp.exposure = 0.8
 	pp.contrast = 1.3
