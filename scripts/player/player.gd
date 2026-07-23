@@ -21,6 +21,13 @@ var _footstep_timer: float = 0.0
 var _footstep_streams: Array = []
 var _run_streams: Array = []
 
+var sprint_energy: float = 1.0
+const SPRINT_DEPLETE_RATE: float = 1.0 / 3.0
+const SPRINT_RECHARGE_RATE: float = 1.0 / 2.0
+const SPRINT_SPEED_BONUS: float = 0.5
+
+signal sprint_energy_changed(value: float)
+
 @onready var visual: Node2D = $Visual
 @onready var betaal: Node2D = $Visual/BetaalPosition/Betaal
 @onready var collision: CollisionShape2D = $CollisionShape2D
@@ -35,6 +42,8 @@ func _ready() -> void:
 	head.polygon = PackedVector2Array([Vector2(-6, -32), Vector2(6, -32), Vector2(8, -24), Vector2(-8, -24)])
 	head.color = Color(0.85, 0.7, 0.55)
 	visual.add_child(head)
+	_make_lit(body)
+	_make_lit(head)
 	for i in 4:
 		var s = load("res://assets/audio/sfx/footstep/forestfs%d.wav" % (i + 1))
 		if s:
@@ -66,7 +75,18 @@ func _physics_process(delta: float) -> void:
 	var h_dir := Input.get_axis("move_left", "move_right")
 	var v_dir := Input.get_axis("move_up", "move_down")
 
+	var sprint_pressed = Input.is_key_pressed(KEY_SHIFT) or Input.is_action_pressed("sprint")
+	var wants_to_sprint = sprint_pressed and (h_dir != 0 or v_dir != 0) and sprint_energy > 0
+
+	if wants_to_sprint:
+		sprint_energy = max(sprint_energy - SPRINT_DEPLETE_RATE * delta, 0.0)
+	else:
+		sprint_energy = min(sprint_energy + SPRINT_RECHARGE_RATE * delta, 1.0)
+	sprint_energy_changed.emit(sprint_energy)
+
 	var effective_speed = speed * speed_multiplier
+	if wants_to_sprint:
+		effective_speed *= 1.0 + SPRINT_SPEED_BONUS
 	if h_dir != 0:
 		velocity.x = move_toward(velocity.x, h_dir * effective_speed, acceleration * delta)
 		visual.scale.x = sign(h_dir) * abs(visual.scale.x)
@@ -86,7 +106,7 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 
 	if h_dir != 0 or v_dir != 0:
-		var is_running = Input.is_action_pressed("sprint") or speed_multiplier > 1.0
+		var is_running = wants_to_sprint or speed_multiplier > 1.0
 		var interval = 0.3 if is_running else 0.5
 		_footstep_timer += delta
 		if _footstep_timer >= interval:
@@ -107,3 +127,11 @@ func activate_speed_boost(duration: float = 10.0) -> void:
 	_speed_boost_tween.tween_interval(duration)
 	_speed_boost_tween.tween_property(self, "speed_multiplier", 1.0, decay_duration)
 	_speed_boost_tween.tween_callback(func(): _speed_boost_tween = null)
+
+func _make_lit(item: CanvasItem) -> void:
+	var shader = load("res://addons/lit/shaders/lit_receiver_fast.gdshader")
+	if not shader:
+		return
+	var mat = ShaderMaterial.new()
+	mat.shader = shader
+	item.material = mat

@@ -1,6 +1,6 @@
 extends Node
 
-enum PuzzleType { OBSERVATION, PARADOX, COLLECTION, MICROPHONE, ENVIRONMENT }
+enum PuzzleType { OBSERVATION, PARADOX, COLLECTION, MICROPHONE, ENVIRONMENT, CHESSBOARD }
 
 var riddle_pool: Array = []
 var riddle_history: Array = []
@@ -12,6 +12,18 @@ func add_riddle(question: String, options: Array, correct_index: int, consequenc
 		"correct_index": correct_index,
 		"consequence": consequence,
 		"puzzle_type": puzzle_type
+	})
+
+func add_chessboard_riddle(question: String, board_data: String, correct_from: int, correct_to: int, consequence: String = "") -> void:
+	riddle_pool.append({
+		"question": question,
+		"options": ["a1", "b1"],
+		"correct_index": 0,
+		"consequence": consequence,
+		"puzzle_type": PuzzleType.CHESSBOARD,
+		"board_data": board_data,
+		"correct_from": correct_from,
+		"correct_to": correct_to,
 	})
 
 func add_environment_question(question: String, correct_answer: String, wrong_answers: Array, consequence: String = "") -> void:

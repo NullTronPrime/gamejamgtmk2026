@@ -7,6 +7,8 @@ signal puzzle_result(correct: bool)
 @onready var option_container: VBoxContainer = $Panel/OptionContainer
 @onready var mic_instruction: Label = $Panel/MicInstruction
 @onready var mic_meter: TextureProgressBar = $Panel/MicMeter
+@onready var board_container: Panel = $Panel/BoardContainer
+@onready var board_question: RichTextLabel = $Panel/BoardContainer/BoardQuestion
 
 var option_buttons: Array = []
 var correct_index: int = -1
@@ -17,6 +19,7 @@ var mic_duration: float = 5.0
 var mic_elapsed: float = 0.0
 var mic_stay_quiet: bool = true
 var mic_success: bool = false
+var _chessboard_widget: Control
 
 func _ready() -> void:
 	for child in option_container.get_children():
@@ -32,12 +35,15 @@ func _ready() -> void:
 func show_riddle(riddle_data: Dictionary) -> void:
 	current_riddle_data = riddle_data
 	question_label.text = riddle_data.question
-	correct_index = riddle_data.correct_index
+	correct_index = riddle_data.get("correct_index", -1)
 	var puzzle_type = riddle_data.get("puzzle_type", RiddleManager.PuzzleType.OBSERVATION)
-	if puzzle_type == RiddleManager.PuzzleType.MICROPHONE:
-		_show_microphone_puzzle(riddle_data)
-	else:
-		_show_multiple_choice(riddle_data)
+	match puzzle_type:
+		RiddleManager.PuzzleType.MICROPHONE:
+			_show_microphone_puzzle(riddle_data)
+		RiddleManager.PuzzleType.CHESSBOARD:
+			_show_chessboard_puzzle(riddle_data)
+		_:
+			_show_multiple_choice(riddle_data)
 
 func _show_multiple_choice(riddle_data: Dictionary) -> void:
 	mic_instruction.visible = false
@@ -127,11 +133,70 @@ func show_consequence(text: String) -> void:
 	await get_tree().create_timer(2.0).timeout
 	hide_puzzle()
 
+func _show_chessboard_puzzle(riddle_data: Dictionary) -> void:
+	option_container.visible = false
+	mic_instruction.visible = false
+	mic_meter.visible = false
+	question_label.visible = false
+	board_container.visible = true
+	board_question.text = riddle_data.question
+
+	if _chessboard_widget:
+		_chessboard_widget.queue_free()
+	_chessboard_widget = preload("res://scenes/chessboard/chessboard_widget.tscn").instantiate()
+	_chessboard_widget.position = Vector2(10, 50)
+	_chessboard_widget.size = Vector2(400, 400)
+	board_container.add_child(_chessboard_widget)
+	_chessboard_widget.puzzle_completed.connect(_on_chessboard_result)
+	_chessboard_widget.setup_puzzle(
+		riddle_data.get("board_data", ""),
+		riddle_data.get("correct_from", -1),
+		riddle_data.get("correct_to", -1)
+	)
+
+	if get_tree().root.has_node("Transition"):
+		await Transition.cover("fade", 0.3)
+
+	visible = true
+	await get_tree().process_frame
+
+	if get_tree().root.has_node("Transition"):
+		await Transition.reveal("fade", 0.3)
+
+func _on_chessboard_result(correct: bool) -> void:
+	await get_tree().create_timer(0.5).timeout
+
+	if get_tree().root.has_node("Transition"):
+		await Transition.cover("fade", 0.3)
+
+	board_container.visible = false
+	if _chessboard_widget:
+		_chessboard_widget.queue_free()
+		_chessboard_widget = null
+
+	question_label.visible = true
+
+	if correct:
+		puzzle_result.emit(true)
+		if get_tree().root.has_node("Transition"):
+			await Transition.reveal("fade", 0.3)
+	else:
+		question_label.text = "Wrong! %s" % current_riddle_data.get("consequence", "")
+		option_container.visible = false
+		mic_instruction.visible = false
+		mic_meter.visible = false
+		if get_tree().root.has_node("Transition"):
+			await Transition.reveal("fade", 0.3)
+		await get_tree().create_timer(2.0).timeout
+		puzzle_result.emit(false)
+
 func hide_puzzle() -> void:
 	MicManager.stop_capture()
 	mic_check_timer.stop()
 	mic_instruction.visible = false
 	mic_meter.visible = false
+	board_container.visible = false
+	question_label.visible = true
 	option_container.visible = true
 	visible = false
 

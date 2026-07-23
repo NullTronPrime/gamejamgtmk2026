@@ -2,10 +2,10 @@ extends CanvasLayer
 
 signal closed()
 
-@onready var bgm_slider: HSlider = $Panel/VBoxContainer/BGMContainer/BGMSlider
-@onready var sfx_slider: HSlider = $Panel/VBoxContainer/SFXContainer/SFXSlider
-@onready var bgm_value_label: Label = $Panel/VBoxContainer/BGMContainer/BGMValue
-@onready var sfx_value_label: Label = $Panel/VBoxContainer/SFXContainer/SFXValue
+@onready var bgm_slider: HSlider = $Panel/VBoxContainer/BGMContainer/BGMControlRow/BGMSlider
+@onready var sfx_slider: HSlider = $Panel/VBoxContainer/SFXContainer/SFXControlRow/SFXSlider
+@onready var bgm_value_label: Label = $Panel/VBoxContainer/BGMContainer/BGMControlRow/BGMValue
+@onready var sfx_value_label: Label = $Panel/VBoxContainer/SFXContainer/SFXControlRow/SFXValue
 @onready var fps_option: OptionButton = $Panel/VBoxContainer/FPSSection/FPSSetting
 @onready var vsync_check: CheckBox = $Panel/VBoxContainer/VSyncSection/VSyncCheck
 @onready var res_option: OptionButton = $Panel/VBoxContainer/ResSection/ResSetting
@@ -22,6 +22,7 @@ const RESOLUTIONS: Array = [
 
 func _ready() -> void:
 	_style_sliders()
+	_style_dropdowns()
 	_load_settings()
 	bgm_slider.value_changed.connect(_on_bgm_changed)
 	sfx_slider.value_changed.connect(_on_sfx_changed)
@@ -30,42 +31,82 @@ func _ready() -> void:
 	res_option.item_selected.connect(_on_resolution_changed)
 	back_button.pressed.connect(_on_back)
 	mic_check.toggled.connect(_on_mic_toggled)
+	_setup_button_animations()
+
+func _setup_button_animations() -> void:
+	for btn in [back_button]:
+		btn.mouse_entered.connect(_on_button_hover.bind(btn))
+		btn.mouse_exited.connect(_on_button_unhover.bind(btn))
+		btn.button_down.connect(_on_button_press.bind(btn))
+
+func _on_button_hover(btn: Button) -> void:
+	var tween = create_tween()
+	tween.tween_property(btn, "scale", Vector2(1.05, 1.05), 0.15).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+
+func _on_button_unhover(btn: Button) -> void:
+	var tween = create_tween()
+	tween.tween_property(btn, "scale", Vector2(1.0, 1.0), 0.15).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+
+func _on_button_press(btn: Button) -> void:
+	var tween = create_tween()
+	tween.tween_property(btn, "scale", Vector2(0.95, 0.95), 0.05)
+
+func _style_dropdowns() -> void:
+	var res_items = ["1280x720", "1600x900", "1920x1080", "2560x1440", "3840x2160"]
+	var fps_items = ["Unlimited", "60 FPS", "120 FPS", "144 FPS"]
+
+	var opts = [res_option, fps_option]
+	var items_list = [res_items, fps_items]
+	for i in opts.size():
+		var opt = opts[i]
+		var items = items_list[i]
+		opt.clear()
+		for item in items:
+			opt.add_item(item)
+		var popup = opt.get_popup()
+		popup.add_theme_font_size_override("font_size", 16)
+		popup.reset_size()
 
 func _style_sliders() -> void:
 	for slider in [bgm_slider, sfx_slider]:
 		var grabber = StyleBoxFlat.new()
 		grabber.bg_color = Color(0.9, 0.9, 1.0, 1)
-		grabber.corner_radius_top_left = 4
-		grabber.corner_radius_top_right = 4
-		grabber.corner_radius_bottom_left = 4
-		grabber.corner_radius_bottom_right = 4
-		grabber.content_margin_left = 8
-		grabber.content_margin_right = 8
-		grabber.content_margin_top = 8
-		grabber.content_margin_bottom = 8
+		grabber.corner_radius_top_left = 14
+		grabber.corner_radius_top_right = 14
+		grabber.corner_radius_bottom_left = 14
+		grabber.corner_radius_bottom_right = 14
+		grabber.content_margin_left = 6
+		grabber.content_margin_right = 6
+		grabber.content_margin_top = 6
+		grabber.content_margin_bottom = 6
 		slider.add_theme_stylebox_override("grabber", grabber)
 		slider.add_theme_stylebox_override("grabber_highlight", grabber)
 
 		var track = StyleBoxFlat.new()
-		track.bg_color = Color(0.15, 0.15, 0.2, 1)
-		track.corner_radius_top_left = 3
-		track.corner_radius_top_right = 3
-		track.corner_radius_bottom_left = 3
-		track.corner_radius_bottom_right = 3
-		track.content_margin_left = 2
-		track.content_margin_right = 2
-		track.content_margin_top = 4
-		track.content_margin_bottom = 4
+		track.bg_color = Color(0.25, 0.25, 0.3, 1)
+		track.corner_radius_top_left = 6
+		track.corner_radius_top_right = 6
+		track.corner_radius_bottom_left = 6
+		track.corner_radius_bottom_right = 6
+		track.content_margin_left = 0
+		track.content_margin_right = 0
+		track.content_margin_top = 12
+		track.content_margin_bottom = 12
 		slider.add_theme_stylebox_override("slider", track)
 
 		var fill = StyleBoxFlat.new()
-		fill.bg_color = Color(0.3, 0.5, 0.3, 1) if slider == bgm_slider else Color(0.5, 0.3, 0.3, 1)
-		fill.corner_radius_top_left = 3
-		fill.corner_radius_top_right = 3
-		fill.corner_radius_bottom_left = 3
-		fill.corner_radius_bottom_right = 3
+		fill.bg_color = Color(0.4, 0.7, 0.4, 1) if slider == bgm_slider else Color(0.7, 0.4, 0.4, 1)
+		fill.corner_radius_top_left = 6
+		fill.corner_radius_top_right = 6
+		fill.corner_radius_bottom_left = 6
+		fill.corner_radius_bottom_right = 6
+		fill.content_margin_left = 0
+		fill.content_margin_right = 0
+		fill.content_margin_top = 14
+		fill.content_margin_bottom = 14
 		slider.add_theme_stylebox_override("grabber_area", fill)
-		slider.add_theme_constant_override("grabber_size", 16)
+		slider.add_theme_constant_override("grabber_size", 40)
+		slider.add_theme_constant_override("center_grabber", 0)
 
 func _load_settings() -> void:
 	bgm_slider.value = AudioManager.bgm_volume

@@ -53,62 +53,74 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 theme_override_constants/separation = 12
 
-[node name="BGMContainer" type="HBoxContainer" parent="Panel/VBoxContainer"]
-size_flags_horizontal = 4
+[node name="BGMContainer" type="VBoxContainer" parent="Panel/VBoxContainer"]
+size_flags_horizontal = 3
+theme_override_constants/separation = 4
 
-[node name="BGMIcon" type="TextureRect" parent="Panel/VBoxContainer/BGMContainer"]
-custom_minimum_size = Vector2(30, 30)
+[node name="BGMLabelRow" type="HBoxContainer" parent="Panel/VBoxContainer/BGMContainer"]
+
+[node name="BGMIcon" type="TextureRect" parent="Panel/VBoxContainer/BGMContainer/BGMLabelRow"]
+custom_minimum_size = Vector2(24, 24)
 stretch_mode = 2
 texture = ExtResource("2")
 modulate = Color(0.5, 0.8, 0.5, 1)
 
-[node name="BGMLabel" type="Label" parent="Panel/VBoxContainer/BGMContainer"]
-text = "Music"
-theme_override_font_sizes/font_size = 18
+[node name="BGMLabel" type="Label" parent="Panel/VBoxContainer/BGMContainer/BGMLabelRow"]
+text = "Music Volume"
+theme_override_font_sizes/font_size = 16
 size_flags_horizontal = 2
 
-[node name="BGMSlider" type="HSlider" parent="Panel/VBoxContainer/BGMContainer"]
+[node name="BGMControlRow" type="HBoxContainer" parent="Panel/VBoxContainer/BGMContainer"]
+size_flags_horizontal = 3
+
+[node name="BGMSlider" type="HSlider" parent="Panel/VBoxContainer/BGMContainer/BGMControlRow"]
 min_value = -40.0
 max_value = 0.0
 value = -10.0
-size_flags_horizontal = 6
-custom_minimum_size = Vector2(0, 36)
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 48)
 
-[node name="BGMValue" type="Label" parent="Panel/VBoxContainer/BGMContainer"]
+[node name="BGMValue" type="Label" parent="Panel/VBoxContainer/BGMContainer/BGMControlRow"]
 text = "100%"
 theme_override_font_sizes/font_size = 16
 min_size = Vector2(50, 0)
 size_flags_horizontal = 1
 
-[node name="SFXContainer" type="HBoxContainer" parent="Panel/VBoxContainer"]
-size_flags_horizontal = 4
+[node name="SFXContainer" type="VBoxContainer" parent="Panel/VBoxContainer"]
+size_flags_horizontal = 3
+theme_override_constants/separation = 4
 
-[node name="SFXIcon" type="TextureRect" parent="Panel/VBoxContainer/SFXContainer"]
-custom_minimum_size = Vector2(30, 30)
+[node name="SFXLabelRow" type="HBoxContainer" parent="Panel/VBoxContainer/SFXContainer"]
+
+[node name="SFXIcon" type="TextureRect" parent="Panel/VBoxContainer/SFXContainer/SFXLabelRow"]
+custom_minimum_size = Vector2(24, 24)
 stretch_mode = 2
 texture = ExtResource("4")
 modulate = Color(0.9, 0.6, 0.4, 1)
 
-[node name="SFXLabel" type="Label" parent="Panel/VBoxContainer/SFXContainer"]
-text = "SFX"
-theme_override_font_sizes/font_size = 18
+[node name="SFXLabel" type="Label" parent="Panel/VBoxContainer/SFXContainer/SFXLabelRow"]
+text = "SFX Volume"
+theme_override_font_sizes/font_size = 16
 size_flags_horizontal = 2
 
-[node name="SFXSlider" type="HSlider" parent="Panel/VBoxContainer/SFXContainer"]
+[node name="SFXControlRow" type="HBoxContainer" parent="Panel/VBoxContainer/SFXContainer"]
+size_flags_horizontal = 3
+
+[node name="SFXSlider" type="HSlider" parent="Panel/VBoxContainer/SFXContainer/SFXControlRow"]
 min_value = -40.0
 max_value = 0.0
 value = 0.0
-size_flags_horizontal = 6
-custom_minimum_size = Vector2(0, 36)
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 48)
 
-[node name="SFXValue" type="Label" parent="Panel/VBoxContainer/SFXContainer"]
+[node name="SFXValue" type="Label" parent="Panel/VBoxContainer/SFXContainer/SFXControlRow"]
 text = "100%"
 theme_override_font_sizes/font_size = 16
 min_size = Vector2(50, 0)
 size_flags_horizontal = 1
 
 [node name="ResSection" type="HBoxContainer" parent="Panel/VBoxContainer"]
-size_flags_horizontal = 4
+size_flags_horizontal = 3
 
 [node name="ResIcon" type="TextureRect" parent="Panel/VBoxContainer/ResSection"]
 custom_minimum_size = Vector2(30, 30)
@@ -122,12 +134,12 @@ theme_override_font_sizes/font_size = 18
 size_flags_horizontal = 2
 
 [node name="ResSetting" type="OptionButton" parent="Panel/VBoxContainer/ResSection"]
-size_flags_horizontal = 6
+size_flags_horizontal = 3
 custom_minimum_size = Vector2(0, 36)
 items = ["1280x720", "1600x900", "1920x1080", "2560x1440", "3840x2160"]
 
 [node name="FPSSection" type="HBoxContainer" parent="Panel/VBoxContainer"]
-size_flags_horizontal = 4
+size_flags_horizontal = 3
 
 [node name="FPSIcon" type="TextureRect" parent="Panel/VBoxContainer/FPSSection"]
 custom_minimum_size = Vector2(30, 30)
@@ -141,12 +153,12 @@ theme_override_font_sizes/font_size = 18
 size_flags_horizontal = 2
 
 [node name="FPSSetting" type="OptionButton" parent="Panel/VBoxContainer/FPSSection"]
-size_flags_horizontal = 6
+size_flags_horizontal = 3
 custom_minimum_size = Vector2(0, 36)
 items = ["Unlimited", "60 FPS", "120 FPS", "144 FPS"]
 
 [node name="VSyncSection" type="HBoxContainer" parent="Panel/VBoxContainer"]
-size_flags_horizontal = 4
+size_flags_horizontal = 3
 
 [node name="VSyncIcon" type="TextureRect" parent="Panel/VBoxContainer/VSyncSection"]
 custom_minimum_size = Vector2(30, 30)
@@ -161,11 +173,11 @@ size_flags_horizontal = 2
 
 [node name="VSyncCheck" type="CheckBox" parent="Panel/VBoxContainer/VSyncSection"]
 text = "On"
-size_flags_horizontal = 6
+size_flags_horizontal = 3
 custom_minimum_size = Vector2(0, 36)
 
 [node name="MicSection" type="HBoxContainer" parent="Panel/VBoxContainer"]
-size_flags_horizontal = 4
+size_flags_horizontal = 3
 
 [node name="MicIcon" type="TextureRect" parent="Panel/VBoxContainer/MicSection"]
 custom_minimum_size = Vector2(30, 30)
@@ -180,12 +192,12 @@ size_flags_horizontal = 2
 
 [node name="MicCheck" type="CheckBox" parent="Panel/VBoxContainer/MicSection"]
 text = "On"
-size_flags_horizontal = 6
+size_flags_horizontal = 3
 custom_minimum_size = Vector2(0, 36)
 button_pressed = true
 
 [node name="BackButton" type="Button" parent="Panel/VBoxContainer"]
 text = "Back"
 theme_override_font_sizes/font_size = 20
-size_flags_horizontal = 4
+size_flags_horizontal = 3
 custom_minimum_size = Vector2(0, 44)

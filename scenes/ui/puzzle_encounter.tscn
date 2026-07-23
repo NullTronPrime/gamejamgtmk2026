@@ -86,3 +86,39 @@ visible = false
 value = 0.0
 tint_progress = Color(1, 0.3, 0.3, 1)
 tint_under = Color(0.2, 0.1, 0.1, 1)
+
+[node name="BoardContainer" type="Panel" parent="Panel"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 20.0
+offset_top = 10.0
+offset_right = -20.0
+offset_bottom = -20.0
+visible = false
+mouse_filter = 2
+
+[node name="HintLabel" type="Label" parent="Panel/BoardContainer"]
+anchor_right = 1.0
+offset_left = 420.0
+offset_top = 20.0
+offset_right = -20.0
+offset_bottom = -320.0
+theme_override_font_sizes/font_size = 28
+theme_override_colors/font_color = Color(1.0, 0.85, 0.3, 1)
+autowrap_mode = 2
+horizontal_alignment = 1
+vertical_alignment = 1
+text = "FIND CHECKMATE IN 1!"
+
+[node name="BoardQuestion" type="RichTextLabel" parent="Panel/BoardContainer"]
+anchor_right = 1.0
+anchor_left = 1.0
+offset_left = -400.0
+offset_top = 320.0
+offset_right = -20.0
+offset_bottom = -10.0
+theme_override_font_sizes/normal_font_size = 16
+theme_override_colors/default_color = Color(0.85, 0.85, 0.85, 1)
+autowrap_mode = 2
+bbcode_enabled = true
+text = "It is White to move. Find checkmate in one!"

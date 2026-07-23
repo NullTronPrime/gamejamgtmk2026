@@ -4,7 +4,7 @@ enum GameState { TITLE, INTRO, PLAYING, PUZZLE, RESET, WIN }
 
 var state: int = GameState.TITLE
 var run_timer: float = 0.0
-var max_run_time: float = 999999.0
+var max_run_time: float = 600.0
 var puzzle_count: int = 0
 var puzzles_solved_this_run: int = 0
 var puzzles_needed_to_win: int = 5
@@ -14,7 +14,7 @@ var last_puzzle_type: int = -1
 var puzzle_type_weights: Dictionary = {
 	RiddleManager.PuzzleType.OBSERVATION: 25,
 	RiddleManager.PuzzleType.PARADOX: 25,
-	RiddleManager.PuzzleType.COLLECTION: 12,
+	RiddleManager.PuzzleType.CHESSBOARD: 12,
 	RiddleManager.PuzzleType.MICROPHONE: 13,
 	RiddleManager.PuzzleType.ENVIRONMENT: 25
 }

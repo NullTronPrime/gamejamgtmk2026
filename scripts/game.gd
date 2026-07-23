@@ -17,12 +17,14 @@ func _show_title() -> void:
 func _on_open_options() -> void:
 	if not options_menu:
 		options_menu = preload("res://scenes/ui/options_menu.tscn").instantiate()
+		options_menu.visible = false
 		add_child(options_menu)
 		options_menu.closed.connect(_on_options_closed)
+	title_screen.visible = false
 	options_menu.visible = true
 
 func _on_options_closed() -> void:
-	pass
+	title_screen.visible = true
 
 func _on_start_game() -> void:
 	title_screen.queue_free()
@@ -34,7 +36,10 @@ func _show_intro() -> void:
 	intro_cutscene.finished.connect(_on_intro_finished)
 
 func _on_intro_finished() -> void:
-	intro_cutscene.queue_free()
+	if intro_cutscene:
+		intro_cutscene.visible = false
+		intro_cutscene.queue_free()
+		intro_cutscene = null
 	_start_gameplay()
 
 func _start_gameplay() -> void:

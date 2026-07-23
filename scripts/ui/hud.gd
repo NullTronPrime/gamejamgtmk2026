@@ -9,6 +9,9 @@ extends CanvasLayer
 @onready var minimap_line: ColorRect = $MinimapPanel/MinimapLine
 @onready var spawn_marker: ColorRect = $MinimapPanel/SpawnMarker
 @onready var benefits_label: Label = $BenefitsPanel/BenefitsLabel
+@onready var sprint_fill: ColorRect = $SprintFill
+
+var _dist_label: Label
 
 var warning_shown: bool = false
 
@@ -18,6 +21,16 @@ func _ready() -> void:
 	GameManager.puzzle_type_changed.connect(_on_puzzle_type_changed)
 	GameManager.bonus_awarded.connect(_on_bonus_awarded)
 	process_mode = PROCESS_MODE_ALWAYS
+
+	_dist_label = Label.new()
+	_dist_label.name = "DistanceLabel"
+	_dist_label.offset_left = 10
+	_dist_label.offset_top = 115
+	_dist_label.offset_right = 230
+	_dist_label.offset_bottom = 135
+	_dist_label.add_theme_font_size_override("font_size", 14)
+	_dist_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	add_child(_dist_label)
 
 func _process(_delta: float) -> void:
 	var forest = get_node_or_null("/root/Game/ForestLevel")
@@ -33,6 +46,11 @@ func _process(_delta: float) -> void:
 	marker_x = clamp(marker_x, minimap_line.position.x, minimap_line.position.x + map_width - player_marker.size.x)
 	player_marker.position.x = marker_x
 	spawn_marker.position.x = minimap_line.position.x + (view_range / 2.0) / view_range * map_width
+
+	sprint_fill.size.x = max(1, player.sprint_energy * 166)
+
+	var dist_m = int(GameManager.max_distance / 10.0)
+	_dist_label.text = "Distance: %dm" % dist_m
 
 func _on_timer_updated(time_left: float) -> void:
 	timer_label.text = GameManager.get_time_remaining_string()
@@ -74,7 +92,7 @@ func _on_puzzle_type_changed(puzzle_type: int) -> void:
 	var type_names = {
 		RiddleManager.PuzzleType.OBSERVATION: "Observation",
 		RiddleManager.PuzzleType.PARADOX: "Paradox",
-		RiddleManager.PuzzleType.COLLECTION: "Collection",
+		RiddleManager.PuzzleType.CHESSBOARD: "Chessboard",
 		RiddleManager.PuzzleType.MICROPHONE: "Microphone",
 		RiddleManager.PuzzleType.ENVIRONMENT: "Environment"
 	}

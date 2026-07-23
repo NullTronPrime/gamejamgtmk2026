@@ -215,12 +215,6 @@ class ObservationTracker:
 			questions.append(_make_yesno_q("Were there more trees than bushes?", tree_count > bush_count))
 		if tree_count > 0 and left_side > 0 and right_side > 0:
 			questions.append(_make_yesno_q("Were most trees on your left?", left_side > right_side))
-		if seen_names.size() >= 2:
-			var a = seen_names[randi() % seen_names.size()]
-			var b = a
-			while b == a and seen_names.size() > 1:
-				b = seen_names[randi() % seen_names.size()]
-			questions.append(_make_yesno_q("Did you see \"" + a + "\" before \"" + b + "\"?", false))
 
 		if questions.is_empty():
 			return {}
@@ -296,6 +290,30 @@ class RockDraw extends Node2D:
 		])
 		draw_colored_polygon(h_points, highlight)
 
+class CircleDraw extends Node2D:
+	var radius: float
+	var fill_color: Color
+	func _draw():
+		draw_circle(Vector2.ZERO, radius, fill_color)
+
+class StarField extends Node2D:
+	var stars: Array[Dictionary] = []
+
+	func _ready():
+		var rng = RandomNumberGenerator.new()
+		rng.seed = 42
+		for i in 120:
+			stars.append({
+				"x": rng.randf_range(-50000, 50000),
+				"y": rng.randf_range(-800, 400),
+				"r": rng.randf_range(0.5, 1.5),
+				"a": rng.randf_range(0.15, 0.6)
+			})
+
+	func _draw():
+		for s in stars:
+			draw_circle(Vector2(s.x, s.y), s.r, Color(1, 1, 1, s.a))
+
 const LEVEL_WIDTH = 8000
 const DEPTH_NEAR = 600
 const DEPTH_FAR = 0
@@ -303,7 +321,7 @@ const DEPTH_FAR = 0
 var player_scene: PackedScene
 var player_instance: CharacterBody2D
 var hud: CanvasLayer
-var dialogue_box: CanvasLayer
+var dialogue_box: Node2D
 var puzzle_encounter: CanvasLayer
 var reset_cutscene: CanvasLayer
 
@@ -314,7 +332,7 @@ var _generated_chunk_min: int = -25
 var _generated_chunk_max: int = 25
 var _chunk_idx_counter: int = 500
 const CHUNK_SIZE: float = 400.0
-const GENERATE_AHEAD: int = 8
+const GENERATE_AHEAD: int = 4
 var environment: EnvironmentTracker
 var observation: ObservationTracker
 var _observation_scan_timer: float = 0.0
@@ -337,9 +355,9 @@ func _ready() -> void:
 	reset_cutscene = preload("res://scenes/reset_cutscene.tscn").instantiate()
 
 	add_child(hud)
-	add_child(dialogue_box)
 	add_child(puzzle_encounter)
 	add_child(reset_cutscene)
+	reset_cutscene.visible = false
 
 	dialogue_box.response_chosen.connect(_on_dialogue_response)
 	puzzle_encounter.puzzle_result.connect(_on_puzzle_result)
@@ -353,6 +371,7 @@ func _ready() -> void:
 	var ambience_stream = load("res://assets/audio/sfx/ambience.wav")
 	if ambience_stream:
 		AudioManager.play_ambience(ambience_stream)
+	_setup_lighting()
 	GameManager.start_run()
 
 var _game_time: float = 0.0
@@ -384,22 +403,39 @@ func _build_terrain() -> void:
 	add_child(sky)
 	move_child(sky, 0)
 
-	var moon = ColorRect.new()
-	moon.name = "Moon"
-	moon.offset_left = 1800
-	moon.offset_top = 80
-	moon.size = Vector2(60, 60)
-	moon.color = Color(0.85, 0.85, 0.9, 0.95)
-	add_child(moon)
-	move_child(moon, 1)
-	var moon_glow = ColorRect.new()
+	var sky_color = Color(0.02, 0.02, 0.08)
+
+	var star_field = StarField.new()
+	star_field.name = "Stars"
+	add_child(star_field)
+	move_child(star_field, 1)
+
+	var moon_node = Node2D.new()
+	moon_node.name = "MoonNode"
+	moon_node.position = Vector2(400, 80)
+
+	var moon_glow = CircleDraw.new()
 	moon_glow.name = "MoonGlow"
-	moon_glow.offset_left = 1760
-	moon_glow.offset_top = 40
-	moon_glow.size = Vector2(140, 140)
-	moon_glow.color = Color(0.3, 0.3, 0.5, 0.15)
-	add_child(moon_glow)
-	move_child(moon_glow, 1)
+	moon_glow.radius = 130
+	moon_glow.fill_color = Color(0.5, 0.6, 0.9, 0.08)
+	moon_node.add_child(moon_glow)
+
+	var moon_halo = CircleDraw.new()
+	moon_halo.name = "MoonHalo"
+	moon_halo.radius = 85
+	moon_halo.fill_color = Color(0.7, 0.8, 1.0, 0.15)
+	moon_node.add_child(moon_halo)
+
+	var moon_disc = CircleDraw.new()
+	moon_disc.name = "MoonDisc"
+	moon_disc.radius = 55
+	moon_disc.fill_color = Color(0.92, 0.92, 0.96, 0.95)
+	moon_node.add_child(moon_disc)
+
+	add_child(moon_node)
+	move_child(moon_node, 1)
+	for c in [moon_node, star_field]:
+		c.queue_redraw()
 
 	var dirt = ColorRect.new()
 	dirt.name = "Dirt"
@@ -459,7 +495,7 @@ func _generate_chunk(ci: int) -> void:
 		environment.register_tree("GiantTree_%d" % _chunk_idx_counter, gx, gy, gt)
 		observation.register_object("GiantTree_%d" % _chunk_idx_counter, Vector2(gx, gy), "tree")
 
-	var tree_count = rng.randi_range(2, 4)
+	var tree_count = rng.randi_range(1, 2)
 	for i in tree_count:
 		var t = rng.randf_range(0.0, 1.0)
 		var ty = DEPTH_FAR + t * (DEPTH_NEAR - DEPTH_FAR)
@@ -488,7 +524,7 @@ func _generate_chunk(ci: int) -> void:
 		environment.register_tree(tree_name, tx, ty, t)
 		observation.register_object(tree_name, Vector2(tx, ty), "tree")
 
-	var bush_count = rng.randi_range(1, 2)
+	var bush_count = rng.randi_range(0, 1)
 	for i in bush_count:
 		var t = rng.randf_range(0.0, 1.0)
 		var by = DEPTH_FAR + t * (DEPTH_NEAR - DEPTH_FAR)
@@ -546,8 +582,8 @@ func _build_tree(parent: Node2D, tree_name: String, x: float, y: float, color: C
 				r["D"] = "E"
 				r["E"] = "[--l]fD"
 				tree.rules = r
-				tree.max_steps = 9
-				tree.current_step = 9
+				tree.max_steps = 5
+				tree.current_step = 5
 				tree.branch_length = clamp(h / 12.0, 5.0, 20.0)
 				tree.angle = 26.0
 				tree.leaf_growth_threshold = 5.0
@@ -560,8 +596,8 @@ func _build_tree(parent: Node2D, tree_name: String, x: float, y: float, color: C
 				r["Y"] = "fB"
 				r["B"] = "[--l++++l][+X]fA"
 				tree.rules = r
-				tree.max_steps = 10
-				tree.current_step = 10
+				tree.max_steps = 6
+				tree.current_step = 6
 				tree.branch_length = clamp(h / 15.0, 6.0, 18.0)
 				tree.angle = 30.0
 				tree.leaf_growth_threshold = 9.0
@@ -571,8 +607,8 @@ func _build_tree(parent: Node2D, tree_name: String, x: float, y: float, color: C
 			var r: Dictionary[String, String] = {}
 			r["X"] = "f[+l][-l]"
 			tree.rules = r
-			tree.max_steps = 4
-			tree.current_step = 4
+			tree.max_steps = 6
+			tree.current_step = 6
 			tree.angle = 20.0
 			tree.branch_length = clamp(h / 5.0, 10.0, 35.0)
 			tree.leaf_growth_threshold = 10.0
@@ -585,8 +621,8 @@ func _build_tree(parent: Node2D, tree_name: String, x: float, y: float, color: C
 				r["A"] = "fB"
 				r["B"] = "[+l][-l]"
 				tree.rules = r
-				tree.max_steps = 6
-				tree.current_step = 6
+				tree.max_steps = 5
+				tree.current_step = 5
 				tree.branch_length = clamp(h / 10.0, 6.0, 22.0)
 				tree.angle = 35.0
 				tree.leaf_growth_threshold = 4.0
@@ -598,8 +634,8 @@ func _build_tree(parent: Node2D, tree_name: String, x: float, y: float, color: C
 				r["A"] = "[--l][++l]fB"
 				r["B"] = "[--l][++l]"
 				tree.rules = r
-				tree.max_steps = 5
-				tree.current_step = 5
+				tree.max_steps = 6
+				tree.current_step = 6
 				tree.branch_length = clamp(h / 12.0, 8.0, 25.0)
 				tree.angle = 35.0
 				tree.leaf_growth_threshold = 7.0
@@ -613,8 +649,8 @@ func _build_tree(parent: Node2D, tree_name: String, x: float, y: float, color: C
 				r["B"] = "f[+l][-l]C"
 				r["C"] = "f[+l][-l]"
 				tree.rules = r
-				tree.max_steps = 7
-				tree.current_step = 7
+				tree.max_steps = 5
+				tree.current_step = 5
 				tree.branch_length = clamp(h / 14.0, 4.0, 14.0)
 				tree.angle = 28.0
 				tree.leaf_growth_threshold = 6.0
@@ -641,8 +677,8 @@ func _build_tree(parent: Node2D, tree_name: String, x: float, y: float, color: C
 				r["A"] = "[+k]f[-k]f[B]"
 				r["B"] = "[+l]f[-l]"
 				tree.rules = r
-				tree.max_steps = 8
-				tree.current_step = 8
+				tree.max_steps = 5
+				tree.current_step = 5
 				tree.branch_length = clamp(h / 11.0, 5.0, 18.0)
 				tree.angle = 40.0
 				tree.leaf_growth_threshold = 4.0
@@ -657,8 +693,8 @@ func _build_tree(parent: Node2D, tree_name: String, x: float, y: float, color: C
 				r["B"] = "[+Y]f[-Z]fC"
 				r["C"] = "[--l][++l]"
 				tree.rules = r
-				tree.max_steps = 7
-				tree.current_step = 7
+				tree.max_steps = 6
+				tree.current_step = 6
 				tree.branch_length = clamp(h / 13.0, 6.0, 20.0)
 				tree.angle = 38.0
 				tree.leaf_growth_threshold = 8.0
@@ -668,11 +704,24 @@ func _build_tree(parent: Node2D, tree_name: String, x: float, y: float, color: C
 	var branch_shade = Color(0.2 + color.r * 0.15, 0.12 + color.g * 0.1, 0.06 + color.b * 0.05)
 	tree.branch_width = clamp(w * 0.08, 1.0, 4.0)
 	tree.branch_color = branch_shade
-	tree.wind_strength = randf_range(0.2, 0.6)
-	tree.leaf_angle = randf_range(15.0, 40.0)
+	tree.wind_strength = randf_range(0.0, 0.05)
 
 	node.add_child(tree)
+	_make_lit(tree)
 	parent.add_child(node)
+
+	var occluder = LightOccluder2D.new()
+	var poly = OccluderPolygon2D.new()
+	var pad = w * 0.3
+	var top_y = -h * 0.8
+	poly.polygon = PackedVector2Array([
+		Vector2(-w / 2 - pad, top_y),
+		Vector2(w / 2 + pad, top_y),
+		Vector2(w / 2 + pad, 0),
+		Vector2(-w / 2 - pad, 0)
+	])
+	occluder.occluder = poly
+	node.add_child(occluder)
 
 func _build_rect_prop(parent: Node2D, prop_name: String, x: float, y: float, color: Color, w: float, h: float) -> void:
 	var node = Node2D.new()
@@ -686,6 +735,7 @@ func _build_rect_prop(parent: Node2D, prop_name: String, x: float, y: float, col
 		bush_draw.bush_height = h
 		bush_draw.offset_y = -h
 		node.add_child(bush_draw)
+		_make_lit(bush_draw)
 	elif prop_name.begins_with("Rock"):
 		var rock_draw = RockDraw.new()
 		rock_draw.rock_color = color
@@ -693,6 +743,7 @@ func _build_rect_prop(parent: Node2D, prop_name: String, x: float, y: float, col
 		rock_draw.rock_height = h
 		rock_draw.offset_y = -h
 		node.add_child(rock_draw)
+		_make_lit(rock_draw)
 
 	parent.add_child(node)
 
@@ -728,18 +779,30 @@ func _add_sample_riddles() -> void:
 		RiddleManager.PuzzleType.PARADOX
 	)
 
-	# COLLECTION riddles — concept discussed: "Betaal urges you to gather twigs/items"
-	RiddleManager.add_riddle(
-		"Betaal urges you to gather twigs from the forest floor. How many does he demand?",
-		["Three", "Five", "Seven", "Nine"],
-		1, "Five twigs. A handful of dry bones from the earth's skeleton.",
-		RiddleManager.PuzzleType.COLLECTION
+	# CHESSBOARD riddles — checkmate-in-one positions
+	RiddleManager.add_chessboard_riddle(
+		"It is White to move. Find checkmate in one!\n\nThe rook travels the g-file. The bishop on e5 watches the only door out of e7.",
+		".....k.r.....pp.............B........................................KR.",
+		62, 6,
+		"'A king who cannot see the killing square should not carry a head,' Betaal says."
 	)
-	RiddleManager.add_riddle(
-		"Collect three fallen leaves for Betaal. Which color does he favour?",
-		["Green", "Red", "Brown", "Yellow"],
-		2, "Brown. The colour of dead things. He collects rot and memory.",
-		RiddleManager.PuzzleType.COLLECTION
+	RiddleManager.add_chessboard_riddle(
+		"It is White to move. Find checkmate in one!\n\nThe queen crosses the board. The rook on h7 holds the back door shut.",
+		".......k.......R........................................Q......K",
+		56, 0,
+		"'You let the king breathe,' Betaal whispers. 'In the dark, one gasp is all we need.'"
+	)
+	RiddleManager.add_chessboard_riddle(
+		"It is White to move. Find checkmate in one!\n\nThe queen steps forward one square. The rook on g7 seals the escape.",
+		".......k.....QR........................................K.......",
+		13, 6,
+		"'You held the killing square in your hand and opened your fingers,' Betaal laughs."
+	)
+	RiddleManager.add_chessboard_riddle(
+		"It is White to move. Find checkmate in one!\n\nThe queen on h1 has a clear line. The rook on c7 sweeps the seventh rank.",
+		"k..........R................................................K......Q",
+		63, 7,
+		"'The corner is a cage,' Betaal says. 'You had the key and threw it away.'"
 	)
 
 	# MICROPHONE riddles — concept discussed: "stay silent" / "scream"
@@ -805,13 +868,17 @@ func _trigger_betaal_dialogue() -> void:
 
 	GameManager.trigger_puzzle()
 	var questions = [
-		"Answer my riddle, Vikram!",
-		"Solve my riddle if you dare!",
-		"I have a riddle for you, mortal.",
-		"Answer wisely, or face the darkness!"
+		"[placeholder]",
+		"[placeholder]",
+		"[placeholder]",
+		"[placeholder]"
 	]
-	dialogue_box.show_text(questions[randi() % questions.size()])
 	if player_instance:
+		var betaal_pos = player_instance.get_node_or_null("Visual/BetaalPosition")
+		if betaal_pos:
+			betaal_pos.add_child(dialogue_box)
+			dialogue_box.position = Vector2(120, -60)
+		dialogue_box.show_text(questions[randi() % questions.size()])
 		var betaal = player_instance.get_node_or_null("Visual/BetaalPosition/Betaal")
 		if betaal and betaal.has_method("start_speaking"):
 			betaal.start_speaking()
@@ -828,6 +895,8 @@ func _stop_betaal_speaking() -> void:
 
 func _on_dialogue_response(response: bool) -> void:
 	dialogue_box.hide_box()
+	if dialogue_box.get_parent():
+		dialogue_box.get_parent().remove_child(dialogue_box)
 	_stop_betaal_speaking()
 	_reset_camera_zoom()
 	if response:
@@ -931,16 +1000,14 @@ func _add_leaf_particles() -> void:
 	particles.name = "LeafParticles"
 	particles.position = Vector2(0, -100)
 	particles.z_index = 1
-	particles.amount = 40
+	particles.amount = 20
 	particles.lifetime = 8.0
 	particles.explosiveness = 0.2
 	particles.randomness = 0.6
 	particles.one_shot = false
 	particles.preprocess = 4.0
-	particles.visibility_rect = Rect2(-50000, -500, 100000, 1500)
-	particles.trail_enabled = true
-	particles.trail_lifetime = 1.5
-	particles.trail_sections = 6
+	particles.visibility_rect = Rect2(-2000, -500, 4000, 1500)
+	particles.trail_enabled = false
 
 	var material = ParticleProcessMaterial.new()
 	material.particle_flag_align_y = true
@@ -973,8 +1040,8 @@ func _add_leaf_litter() -> void:
 	var forest = get_node_or_null("ForestProps")
 	if not forest:
 		return
-	for i in 80:
-		var x = randi_range(-3800, 3800)
+	for i in 30:
+		var x = randi_range(-1600, 1600)
 		var y = randi_range(50, 550)
 		var leaf = Sprite2D.new()
 		leaf.texture = leaf_texture
@@ -993,3 +1060,44 @@ func _add_leaf_litter() -> void:
 		leaf.position = Vector2(x, y)
 		leaf.z_index = 0 if randi() % 2 == 0 else -1
 		forest.add_child(leaf)
+		_make_lit(leaf)
+
+func _make_lit(item: CanvasItem) -> void:
+	var shader = load("res://addons/lit/shaders/lit_receiver_fast.gdshader")
+	if not shader:
+		return
+	var mat = ShaderMaterial.new()
+	mat.shader = shader
+	item.material = mat
+
+func _setup_lighting() -> void:
+	if not ClassDB.class_exists(&"LitCanvasModulate"):
+		return
+
+	var ambient = LitCanvasModulate.new()
+	ambient.color = Color(0.04, 0.04, 0.12)
+	ambient.ambient_energy = 0.15
+	add_child(ambient)
+
+	var moonlight = LitDirectionalLight2D.new()
+	moonlight.color = Color(0.55, 0.65, 0.95)
+	moonlight.energy = 3.5
+	moonlight.shadow_enabled = true
+	moonlight.shadow_color = Color(0, 0, 0, 0.9)
+	moonlight.shadow_hardness = 0.5
+	moonlight.rotation = deg_to_rad(-35)
+	add_child(moonlight)
+
+	var pp = LitPostProcess.new()
+	pp.bloom_enabled = true
+	pp.bloom_threshold = 0.3
+	pp.bloom_intensity = 0.3
+	pp.bloom_radius = 2.0
+	pp.grade_enabled = true
+	pp.exposure = 0.8
+	pp.contrast = 1.3
+	pp.saturation = 0.6
+	pp.vignette_enabled = true
+	pp.vignette_strength = 0.4
+	pp.layer = 5
+	add_child(pp)

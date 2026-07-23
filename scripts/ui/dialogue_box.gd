@@ -1,8 +1,8 @@
-extends CanvasLayer
+extends Node2D
 
 signal response_chosen(response: bool)
-signal shown()
-signal hidden()
+signal text_shown()
+signal text_hidden()
 
 const TYPING_SPEED_MS: float = 0.03
 
@@ -31,13 +31,13 @@ func show_text(text: String) -> void:
 	yes_button.disabled = true
 	no_button.disabled = true
 	_text_visible = true
-	shown.emit()
+	text_shown.emit()
 
 func hide_box() -> void:
 	visible = false
 	_text_visible = false
 	_typing_done = true
-	hidden.emit()
+	text_hidden.emit()
 
 func _process(delta: float) -> void:
 	if not _text_visible or _typing_done:
