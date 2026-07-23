@@ -39,6 +39,11 @@ var _result_overlay: ColorRect
 var _input_locked := false
 var _panel: Panel
 
+var _dragging: bool = false
+var _drag_from_sq: int = -1
+var _drag_label: Label
+var _drag_start_pos: Vector2
+
 func _ready() -> void:
 	_build_board()
 
@@ -128,10 +133,41 @@ func _render_board() -> void:
 func _gui_input(event: InputEvent) -> void:
 	if _input_locked:
 		return
-	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		var sq := _pos_to_square(get_local_mouse_position())
-		if sq >= 0:
-			_handle_square_click(sq)
+
+	if event is InputEventMouseButton:
+		var mouse_pos := get_local_mouse_position()
+		if event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+			var sq := _pos_to_square(mouse_pos)
+			if sq >= 0 and board[sq] != ".":
+				_dragging = true
+				_drag_from_sq = sq
+				_drag_start_pos = mouse_pos
+				_drag_label = _piece_labels[sq]
+				selected_sq = sq
+				_highlight.visible = true
+				var sq_size := _square_size()
+				var row := sq / BOARD_SIZE
+				var col := sq % BOARD_SIZE
+				_highlight.position = Vector2(col * sq_size + 2, row * sq_size + 2)
+				_highlight.size = Vector2(sq_size + 2, sq_size + 2)
+		elif not event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+			if _dragging:
+				_dragging = false
+				_drag_label.z_index = 0
+				var target_sq := _pos_to_square(mouse_pos)
+				if target_sq >= 0 and target_sq != _drag_from_sq and board[target_sq] == ".":
+					_highlight.visible = false
+					move_made.emit(_drag_from_sq, target_sq)
+					_check_move(_drag_from_sq, target_sq)
+				else:
+					selected_sq = -1
+					_highlight.visible = false
+					_update_layout()
+
+	if event is InputEventMouseMotion and _dragging:
+		var sq_size := _square_size()
+		_drag_label.position = get_local_mouse_position() - Vector2(sq_size / 2, sq_size / 2)
+		_drag_label.z_index = 10
 
 func _pos_to_square(pos: Vector2) -> int:
 	var sq_size := _square_size()
@@ -140,36 +176,6 @@ func _pos_to_square(pos: Vector2) -> int:
 	if col < 0 or col >= BOARD_SIZE or row < 0 or row >= BOARD_SIZE:
 		return -1
 	return row * BOARD_SIZE + col
-
-func _handle_square_click(sq: int) -> void:
-	if selected_sq == -1:
-		if board[sq] != ".":
-			selected_sq = sq
-			_highlight.visible = true
-			var sq_size := _square_size()
-			var row := sq / BOARD_SIZE
-			var col := sq % BOARD_SIZE
-			_highlight.position = Vector2(col * sq_size + 2, row * sq_size + 2)
-			_highlight.size = Vector2(sq_size + 2, sq_size + 2)
-	else:
-		if sq == selected_sq:
-			selected_sq = -1
-			_highlight.visible = false
-			return
-		if board[sq] != ".":
-			selected_sq = sq
-			var sq_size := _square_size()
-			var row := sq / BOARD_SIZE
-			var col := sq % BOARD_SIZE
-			_highlight.position = Vector2(col * sq_size + 2, row * sq_size + 2)
-			_highlight.size = Vector2(sq_size + 2, sq_size + 2)
-			return
-		var from_sq := selected_sq
-		var to_sq := sq
-		selected_sq = -1
-		_highlight.visible = false
-		move_made.emit(from_sq, to_sq)
-		_check_move(from_sq, to_sq)
 
 func _update_layout() -> void:
 	var sq_size := _square_size()
@@ -203,6 +209,7 @@ func _check_move(from_sq: int, to_sq: int) -> void:
 		puzzle_completed.emit(false)
 
 func _build_move_animation(from_sq: int, to_sq: int) -> void:
+	_update_layout()
 	var fr := _piece_labels[from_sq]
 	var to := _piece_labels[to_sq]
 	if fr.text.is_empty():

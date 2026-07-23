@@ -46,6 +46,8 @@ func _start_gameplay() -> void:
 	forest_level = preload("res://scenes/world/forest_level.tscn").instantiate()
 	add_child(forest_level)
 	GameManager.state_changed.connect(_on_game_state_changed)
+	var pause_menu = preload("res://scenes/ui/pause_menu.tscn").instantiate()
+	add_child(pause_menu)
 
 func _on_game_state_changed(new_state: int) -> void:
 	if new_state == GameManager.GameState.WIN:

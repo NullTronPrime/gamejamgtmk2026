@@ -1,6 +1,6 @@
 extends Node
 
-enum GameState { TITLE, INTRO, PLAYING, PUZZLE, RESET, WIN }
+enum GameState { TITLE, INTRO, PLAYING, PUZZLE, SECOND_PUZZLE, PLATFORMER, RESET, WIN }
 
 var state: int = GameState.TITLE
 var run_timer: float = 0.0
@@ -10,26 +10,23 @@ var puzzles_solved_this_run: int = 0
 var puzzles_needed_to_win: int = 5
 var current_run: int = 0
 
-var last_puzzle_type: int = -1
-var puzzle_type_weights: Dictionary = {
-	RiddleManager.PuzzleType.OBSERVATION: 25,
-	RiddleManager.PuzzleType.PARADOX: 25,
-	RiddleManager.PuzzleType.CHESSBOARD: 12,
-	RiddleManager.PuzzleType.MICROPHONE: 13,
-	RiddleManager.PuzzleType.ENVIRONMENT: 25
-}
+var current_riddle_result: int = -1
+var pending_level_difficulty: int = RiddleManager.LevelDifficulty.NORMAL
+var got_second_riddle: bool = false
+var second_riddle_correct: bool = false
+var active_buffs: Dictionary = {}
 
+var max_distance: float = 0.0
 var question_saves: int = 0
 var mic_puzzles_disabled: bool = false
-var max_distance: float = 0.0
 
 signal state_changed(new_state: int)
 signal timer_updated(time_left: float)
 signal puzzle_solved()
 signal run_ended()
 signal game_won()
-signal puzzle_type_changed(puzzle_type: int)
 signal bonus_awarded(bonus_type: String)
+signal puzzle_type_changed(puzzle_type: int)
 
 func _ready() -> void:
 	process_mode = PROCESS_MODE_ALWAYS
@@ -38,11 +35,13 @@ func start_run() -> void:
 	run_timer = max_run_time
 	puzzles_solved_this_run = 0
 	max_distance = 0.0
+	question_saves = 0
+	active_buffs.clear()
 	current_run += 1
 	change_state(GameState.PLAYING)
 
 func _process(delta: float) -> void:
-	if state == GameState.PLAYING:
+	if state == GameState.PLAYING or state == GameState.PLATFORMER:
 		run_timer -= delta
 		timer_updated.emit(run_timer)
 
@@ -53,40 +52,56 @@ func change_state(new_state: int) -> void:
 func trigger_puzzle() -> void:
 	change_state(GameState.PUZZLE)
 
-func get_next_puzzle_type() -> int:
-	var weights = puzzle_type_weights.duplicate()
-	if mic_puzzles_disabled:
-		weights.erase(RiddleManager.PuzzleType.MICROPHONE)
-	var total_weight = 0
-	for weight in weights.values():
-		total_weight += weight
-	if total_weight == 0:
-		return RiddleManager.PuzzleType.OBSERVATION
-	var rand = randi() % total_weight
-	var cumulative = 0
-	for puzzle_type in weights:
-		cumulative += weights[puzzle_type]
-		if rand < cumulative:
-			return puzzle_type
-	return RiddleManager.PuzzleType.OBSERVATION
+func on_riddle_answered(category: int) -> void:
+	current_riddle_result = category
+	match category:
+		RiddleManager.Category.RIGHT:
+			pending_level_difficulty = RiddleManager.LevelDifficulty.EASY
+			puzzles_solved_this_run += 1
+			puzzle_count += 1
+			puzzle_solved.emit()
+			var buff = "jump" if randi() % 2 == 0 else "life"
+			active_buffs[buff] = active_buffs.get(buff, 0) + 1
+			bonus_awarded.emit(buff)
+			if puzzles_solved_this_run >= puzzles_needed_to_win:
+				change_state(GameState.WIN)
+				game_won.emit()
+				return
+			change_state(GameState.PLATFORMER)
+		RiddleManager.Category.WRONG:
+			got_second_riddle = true
+			change_state(GameState.SECOND_PUZZLE)
+		RiddleManager.Category.FALSE:
+			pending_level_difficulty = RiddleManager.LevelDifficulty.NORMAL
+			puzzles_solved_this_run += 1
+			puzzle_count += 1
+			puzzle_solved.emit()
+			if puzzles_solved_this_run >= puzzles_needed_to_win:
+				change_state(GameState.WIN)
+				game_won.emit()
+				return
+			change_state(GameState.PLATFORMER)
 
-func on_puzzle_completed(correct: bool, puzzle_type: int = -1) -> void:
+func on_second_riddle_completed(correct: bool) -> void:
+	second_riddle_correct = correct
 	if correct:
-		puzzles_solved_this_run += 1
-		puzzle_count += 1
-		puzzle_solved.emit()
-		if puzzles_solved_this_run >= puzzles_needed_to_win:
-			change_state(GameState.WIN)
-			game_won.emit()
-			return
-		if randi() % 2 == 0:
-			bonus_awarded.emit("speed")
-		else:
-			question_saves += 1
-			bonus_awarded.emit("save")
-	if puzzle_type >= 0:
-		last_puzzle_type = puzzle_type
-		puzzle_type_changed.emit(puzzle_type)
+		pending_level_difficulty = RiddleManager.LevelDifficulty.NORMAL
+	else:
+		pending_level_difficulty = RiddleManager.LevelDifficulty.HARD
+	puzzles_solved_this_run += 1
+	puzzle_count += 1
+	puzzle_solved.emit()
+	if puzzles_solved_this_run >= puzzles_needed_to_win:
+		change_state(GameState.WIN)
+		game_won.emit()
+		return
+	change_state(GameState.PLATFORMER)
+
+func on_platformer_completed() -> void:
+	pending_level_difficulty = RiddleManager.LevelDifficulty.NORMAL
+	got_second_riddle = false
+	second_riddle_correct = false
+	current_riddle_result = -1
 	change_state(GameState.PLAYING)
 
 func consume_question_save() -> bool:

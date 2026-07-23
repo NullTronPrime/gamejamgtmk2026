@@ -325,7 +325,8 @@ var dialogue_box: Node2D
 var puzzle_encounter: CanvasLayer
 var reset_cutscene: CanvasLayer
 
-var current_riddle_data
+var current_riddle_data: Dictionary
+var current_shuffled_options: Array[Dictionary]
 var is_waiting_for_response: bool = false
 var _leaf_particles: GPUParticles2D
 var _generated_chunk_min: int = -25
@@ -336,6 +337,19 @@ const GENERATE_AHEAD: int = 4
 var environment: EnvironmentTracker
 var observation: ObservationTracker
 var _observation_scan_timer: float = 0.0
+
+var platformer_scene: PackedScene
+var platformer_instance: Node
+var crossroad_markers: Array[Node2D] = []
+var completed_crossroads: Array[int] = []
+var crossroad_count: int = 6
+var crossroad_spacing: float = 2000.0
+var crossroad_start_x: float = 1200.0
+var current_crossroad_index: int = 0
+var day_night_cycle_time: float = 0.0
+var day_duration: float = 85.7
+var _moonlight_node: Node
+var _ambient_node: Node
 
 @onready var puzzle_timer: Timer = $PuzzleTriggerTimer
 @onready var player_start: Marker2D = $PlayerStart
@@ -349,6 +363,7 @@ func _ready() -> void:
 	_add_leaf_litter()
 
 	player_scene = preload("res://scenes/player.tscn")
+	platformer_scene = preload("res://scenes/world/platformer_level.tscn")
 	hud = preload("res://scenes/ui/hud.tscn").instantiate()
 	dialogue_box = preload("res://scenes/ui/dialogue_box.tscn").instantiate()
 	puzzle_encounter = preload("res://scenes/ui/puzzle_encounter.tscn").instantiate()
@@ -366,18 +381,20 @@ func _ready() -> void:
 	GameManager.bonus_awarded.connect(_on_bonus_awarded)
 	GameManager.state_changed.connect(_on_game_state_changed)
 
-	_add_sample_riddles()
-	_inject_environment_questions()
+	_add_new_riddles()
 	var ambience_stream = load("res://assets/audio/sfx/ambience.wav")
 	if ambience_stream:
 		AudioManager.play_ambience(ambience_stream)
 	_setup_lighting()
+	_setup_crossroads()
 	GameManager.start_run()
 
 var _game_time: float = 0.0
 
 func _process(delta: float) -> void:
 	_game_time += delta
+	if GameManager.state == GameManager.GameState.PLAYING:
+		_update_day_night(delta)
 	_observation_scan_timer += delta
 	if _observation_scan_timer >= 0.5 and player_instance:
 		_observation_scan_timer = 0.0
@@ -752,77 +769,93 @@ func _inject_environment_questions() -> void:
 	for q in questions:
 		RiddleManager.add_environment_question(q.question, q.options[q.correct_index], q.options.filter(func(o): return o != q.options[q.correct_index]), q.consequence)
 
-func _add_sample_riddles() -> void:
-	# PARADOX riddles — directly from team Discord discussions
+func _add_new_riddles() -> void:
 	RiddleManager.add_riddle(
-		"The barber shaves every man who does not shave himself. In this village, who shaves the barber?",
-		["The barber himself", "Another man", "No one", "The question has no answer"],
-		3, "If the barber shaves himself, he shaves a man who shaves himself. If another shaves him, not every man who doesn't shave himself is shaved. Either way, the rule breaks.",
-		RiddleManager.PuzzleType.PARADOX
+		"I hold a sword in one hand and a dagger in the other. The sword strikes true. The dagger strikes swift. Which do you reach for, King?",
+		"The sword", "The dagger", "Both", "Neither",
+		RiddleManager.PuzzleType.PARADOX,
+		"A leader's strength is not the sharpness of blade, but the firmness of hand.",
+		"You chose the tool of assassination. A king holds the sword high, not low."
 	)
 	RiddleManager.add_riddle(
-		"Do you, Mighty King, believe the Sage to be an honest man?",
-		["Yes", "No"],
-		1, "If yes, you trust a demon's word. If no, you call yourself a liar — for I am a Sage too. Your answer crumbles either way.",
-		RiddleManager.PuzzleType.PARADOX
+		"A flower blooms in darkness. Does it need the sun to be beautiful?",
+		"No, its beauty is its own", "Yes, all life needs light", "The flower does not care", "Darkness is the only truth",
+		RiddleManager.PuzzleType.PARADOX,
+		"Wisdom. The flower does not seek the sun's approval. Neither should a king.",
+		"You measure worth by what illuminates it. Vanity, King."
 	)
 	RiddleManager.add_riddle(
-		"O Mighty King, in which hand does my dear Golden Coin lie?",
-		["Left", "Right", "Neither", "Both"],
-		2, "There is no coin. I made you guess at nothing. Your certainty means nothing before the void.",
-		RiddleManager.PuzzleType.PARADOX
+		"Betaal asks: Do you, King, believe yourself to be a just man?",
+		"I am just", "I am not", "Justice is a lie", "The people decide",
+		RiddleManager.PuzzleType.PARADOX,
+		"Confidence befits a king. Let us see if your actions match your words.",
+		"Doubt is the first poison. You have drunk it willingly."
 	)
 	RiddleManager.add_riddle(
-		"A ruler swore before his people that every thief would be punished. One day, a starving widow stole a loaf of bread for her child. If he keeps his oath, an innocent child suffers. If he breaks it, his word loses meaning. Tell me... should a king honor his oath, or his conscience?",
-		["His oath", "His conscience", "Both", "Neither"],
-		1, "Either way, someone loses. That is the weight of the crown. There is no clean answer, King.",
-		RiddleManager.PuzzleType.PARADOX
+		"A widow weeps at the gate. Her son was taken for a debt he did not owe. Do you free him and defy the law, or leave him and keep order?",
+		"Free him", "Leave him", "Hear the widow's plea", "Execute the debtor too",
+		RiddleManager.PuzzleType.PARADOX,
+		"A king's heart sees beyond the law. You have passed the test of mercy.",
+		"The law without heart is a cage. You have locked yourself in it."
+	)
+	RiddleManager.add_riddle(
+		"The village baker gives bread to the poor without counting the cost. Is he generous or foolish?",
+		"Generous", "Foolish", "Both", "Neither matters",
+		RiddleManager.PuzzleType.OBSERVATION,
+		"Generosity without expectation is the rarest coin. You see truly.",
+		"You measure kindness by its cost. Your ledger is cold, King."
+	)
+	RiddleManager.add_riddle(
+		"Two paths lie before you. One is smooth and paved. The other is cracked and overgrown. Which do you walk?",
+		"The cracked path", "The smooth path", "Neither, make my own", "Walk both at once",
+		RiddleManager.PuzzleType.OBSERVATION,
+		"A king does not follow the easy road. He forges the forgotten one.",
+		"Comfort is the thief of greatness. You walked into the trap."
+	)
+	RiddleManager.add_riddle(
+		"Betaal whispers: I see three coins in your pocket. One is a lie, one is a truth, and one is a memory. Which do you spend first?",
+		"The memory", "The lie", "The truth", "Spend none of them",
+		RiddleManager.PuzzleType.OBSERVATION,
+		"Memories make a king. Spend them wisely, and they multiply.",
+		"You chose deceit first. Your treasury is empty already."
+	)
+	RiddleManager.add_riddle(
+		"A crow watches you from a dead branch. It has seen you pass three times. What does it know that you do not?",
+		"That the path is a circle", "That you are being followed", "That the forest is burning", "Nothing, it is a bird",
+		RiddleManager.PuzzleType.OBSERVATION,
+		"The crow sees what you refuse to: every end is a beginning.",
+		"You see only what you want to see. The forest remains a maze."
 	)
 
-	# CHESSBOARD riddles — checkmate-in-one positions
-	RiddleManager.add_chessboard_riddle(
+	RiddleManager.add_second_riddle(
 		"It is White to move. Find checkmate in one!\n\nThe rook travels the g-file. The bishop on e5 watches the only door out of e7.",
-		".....k.r.....pp.............B........................................KR.",
-		62, 6,
-		"'A king who cannot see the killing square should not carry a head,' Betaal says."
+		RiddleManager.PuzzleType.CHESSBOARD,
+		{
+			"board_data": ".....k.r.....pp.............B........................................KR.",
+			"correct_from": 62, "correct_to": 6,
+			"consequence_right": "A king who sees the killing square deserves his crown.",
+			"consequence_wrong": "A king who cannot see the killing square should not carry a head."
+		}
 	)
-	RiddleManager.add_chessboard_riddle(
+	RiddleManager.add_second_riddle(
 		"It is White to move. Find checkmate in one!\n\nThe queen crosses the board. The rook on h7 holds the back door shut.",
-		".......k.......R........................................Q......K",
-		56, 0,
-		"'You let the king breathe,' Betaal whispers. 'In the dark, one gasp is all we need.'"
+		RiddleManager.PuzzleType.CHESSBOARD,
+		{
+			"board_data": ".......k.......R........................................Q......K",
+			"correct_from": 56, "correct_to": 0,
+			"consequence_right": "You held the killing square. Well played.",
+			"consequence_wrong": "You let the king breathe. In the dark, one gasp is all we need."
+		}
 	)
-	RiddleManager.add_chessboard_riddle(
+	RiddleManager.add_second_riddle(
 		"It is White to move. Find checkmate in one!\n\nThe queen steps forward one square. The rook on g7 seals the escape.",
-		".......k.....QR........................................K.......",
-		13, 6,
-		"'You held the killing square in your hand and opened your fingers,' Betaal laughs."
-	)
-	RiddleManager.add_chessboard_riddle(
-		"It is White to move. Find checkmate in one!\n\nThe queen on h1 has a clear line. The rook on c7 sweeps the seventh rank.",
-		"k..........R................................................K......Q",
-		63, 7,
-		"'The corner is a cage,' Betaal says. 'You had the key and threw it away.'"
-	)
-
-	# MICROPHONE riddles — concept discussed: "stay silent" / "scream"
-	RiddleManager.add_riddle(
-		"Stay silent for 5 seconds. Betaal creeps closer.",
-		["Silence", "Noise"],
-		0, "Stillness is the deepest respect for the dead.",
-		RiddleManager.PuzzleType.MICROPHONE
-	)
-	RiddleManager.add_riddle(
-		"Scream! Let the forest hear your voice.",
-		["Silence", "Noise"],
-		1, "Fear given voice is courage. The darkness listens.",
-		RiddleManager.PuzzleType.MICROPHONE
-	)
-	RiddleManager.add_riddle(
-		"Betaal creeps closer... Do not make a sound.",
-		["Silence", "Noise"],
-		0, "Your breath betrays you. The dead have no need for air.",
-		RiddleManager.PuzzleType.MICROPHONE
+		RiddleManager.PuzzleType.CHESSBOARD,
+		{
+			"board_data": ".......k.....QR........................................K.......",
+			"correct_from": 13, "correct_to": 6,
+			"consequence_right": "The trap springs true. The king falls.",
+			"consequence_wrong": "You held the killing square in your hand and opened your fingers."
+		}
 	)
 
 func _on_game_state_changed(new_state: int) -> void:
@@ -832,8 +865,16 @@ func _on_game_state_changed(new_state: int) -> void:
 			puzzle_timer.start()
 			hud.get_node("Panel/WarningLabel").visible = false
 			reset_cutscene.visible = false
+			if platformer_instance:
+				_cleanup_platformer()
+			_mark_crossroad_completed()
 		GameManager.GameState.PUZZLE:
 			puzzle_timer.stop()
+		GameManager.GameState.SECOND_PUZZLE:
+			puzzle_timer.stop()
+		GameManager.GameState.PLATFORMER:
+			puzzle_timer.stop()
+			_load_platformer_level()
 		GameManager.GameState.RESET:
 			_trigger_reset()
 
@@ -849,43 +890,36 @@ func _on_puzzle_timer_timeout() -> void:
 		return
 	if is_waiting_for_response:
 		return
-	_trigger_betaal_dialogue()
+	_trigger_betaal_riddle()
 
-func _trigger_betaal_dialogue() -> void:
+func _trigger_betaal_riddle() -> void:
 	is_waiting_for_response = true
-	var puzzle_type = GameManager.get_next_puzzle_type()
-	if puzzle_type == RiddleManager.PuzzleType.OBSERVATION:
-		var obs_q = observation.generate_observation_question(_game_time)
-		if not obs_q.is_empty():
-			current_riddle_data = obs_q
-		else:
-			current_riddle_data = RiddleManager.get_riddle_by_type(puzzle_type)
-	else:
-		current_riddle_data = RiddleManager.get_riddle_by_type(puzzle_type)
-	if not current_riddle_data:
+	current_riddle_data = RiddleManager.get_random_riddle()
+	if current_riddle_data.is_empty():
 		is_waiting_for_response = false
 		return
 
+	if current_crossroad_index < crossroad_markers.size():
+		crossroad_markers[current_crossroad_index].visible = true
+
 	GameManager.trigger_puzzle()
-	var questions = [
-		"[placeholder]",
-		"[placeholder]",
-		"[placeholder]",
-		"[placeholder]"
-	]
+	GameManager.puzzle_type_changed.emit(current_riddle_data.get("puzzle_type", 0))
 	if player_instance:
-		var betaal_pos = player_instance.get_node_or_null("Visual/BetaalPosition")
-		if betaal_pos:
-			betaal_pos.add_child(dialogue_box)
-			dialogue_box.position = Vector2(120, -60)
-		dialogue_box.show_text(questions[randi() % questions.size()])
 		var betaal = player_instance.get_node_or_null("Visual/BetaalPosition/Betaal")
 		if betaal and betaal.has_method("start_speaking"):
 			betaal.start_speaking()
 		var cam = player_instance.get_node_or_null("Camera2D")
 		if cam:
-			var tween = create_tween()
-			tween.tween_property(cam, "zoom", Vector2(1.3, 1.3), 0.4).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+			var crossroad_pos = _get_crossroad_position(current_crossroad_index)
+			var player_pos = player_instance.position
+			var cam_offset = Vector2(crossroad_pos.x - player_pos.x, crossroad_pos.y - player_pos.y - 80)
+			var tween = create_tween().set_parallel(true)
+			tween.tween_property(cam, "position", cam_offset, 0.8).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+			tween.tween_property(cam, "zoom", Vector2(1.8, 1.8), 0.8).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+			tween.tween_property(cam, "rotation", 0.0, 0.8).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+
+	await get_tree().create_timer(5.0).timeout
+	puzzle_encounter.show_riddle(current_riddle_data, false)
 
 func _stop_betaal_speaking() -> void:
 	if player_instance:
@@ -899,35 +933,28 @@ func _on_dialogue_response(response: bool) -> void:
 		dialogue_box.get_parent().remove_child(dialogue_box)
 	_stop_betaal_speaking()
 	_reset_camera_zoom()
-	if response:
-		puzzle_encounter.show_riddle(current_riddle_data)
-	else:
-		puzzle_encounter.show_consequence(current_riddle_data.consequence)
-		_apply_penalty()
-
-func _apply_penalty() -> void:
-	if GameManager.consume_question_save():
-		_show_bonus_popup("Save Used!", Color(0.3, 0.8, 1.0))
-		return
-	GameManager.run_timer -= 15.0
-	if GameManager.run_timer < 0:
-		GameManager.run_timer = 0
 
 func _reset_camera_zoom() -> void:
 	if player_instance:
 		var cam = player_instance.get_node_or_null("Camera2D")
 		if cam:
-			var tween = create_tween()
-			tween.tween_property(cam, "zoom", Vector2(1.0, 1.0), 0.3).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_SINE)
+			var tween = create_tween().set_parallel(true)
+			tween.tween_property(cam, "position", Vector2.ZERO, 0.4).set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
+			tween.tween_property(cam, "zoom", Vector2(1.0, 1.0), 0.4).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_SINE)
+			tween.tween_property(cam, "rotation", 0.0, 0.4).set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
 
 func _on_bonus_awarded(bonus_type: String) -> void:
 	match bonus_type:
+		"jump":
+			if player_instance and player_instance.has_method("activate_jump_boost"):
+				player_instance.activate_jump_boost()
+			_show_bonus_popup("+30%% Jump Height!", Color(0.3, 1.0, 0.3))
+		"life":
+			_show_bonus_popup("+1 Extra Life!", Color(0.3, 0.8, 1.0))
 		"speed":
 			if player_instance and player_instance.has_method("activate_speed_boost"):
 				player_instance.activate_speed_boost(10.0)
 			_show_bonus_popup("+20%% Speed!", Color(0.3, 1.0, 0.3))
-		"save":
-			_show_bonus_popup("+1 Question Save!", Color(0.3, 0.8, 1.0))
 
 func _show_bonus_popup(text: String, color: Color) -> void:
 	if not player_instance:
@@ -952,14 +979,8 @@ func _on_puzzle_result(correct: bool) -> void:
 	_stop_betaal_speaking()
 	_reset_camera_zoom()
 	is_waiting_for_response = false
-	if not correct:
-		_reset_player_position()
-	var puzzle_type = current_riddle_data.get("puzzle_type", RiddleManager.PuzzleType.OBSERVATION)
-	GameManager.on_puzzle_completed(correct, puzzle_type)
-
-func _reset_player_position() -> void:
-	if player_instance:
-		player_instance.position = player_start.position
+	current_riddle_data = {}
+	current_shuffled_options = []
 
 func _trigger_reset() -> void:
 	_stop_betaal_speaking()
@@ -1062,6 +1083,213 @@ func _add_leaf_litter() -> void:
 		forest.add_child(leaf)
 		_make_lit(leaf)
 
+func _get_crossroad_position(idx: int) -> Vector2:
+	return Vector2(crossroad_start_x + idx * crossroad_spacing, lerp(200.0, 80.0, float(idx) / float(crossroad_count - 1)))
+
+func _setup_crossroads() -> void:
+	_generate_crossroad(0)
+
+func _generate_crossroad(idx: int) -> void:
+	if idx >= crossroad_count:
+		return
+	if idx < crossroad_markers.size():
+		return
+
+	var p = _get_crossroad_position(idx)
+	var cy = p.y
+	var cx = p.x
+
+	var marker = Node2D.new()
+	marker.name = "Crossroad_%d" % idx
+	marker.position = Vector2(0, 0)
+	marker.visible = false
+	add_child(marker)
+
+	var wall = StaticBody2D.new()
+	wall.name = "Wall"
+	wall.position = Vector2(cx, 500)
+	var wall_coll = CollisionShape2D.new()
+	var wall_shape = RectangleShape2D.new()
+	wall_shape.size = Vector2(20, 200)
+	wall_coll.shape = wall_shape
+	wall.add_child(wall_coll)
+	add_child(wall)
+
+	var stripe_count = 40
+	var road_max_y = 600.0
+
+	for i in range(stripe_count):
+		var t = float(i) / float(stripe_count - 1)
+		var y = t * road_max_y
+		var path_w = lerp(200.0, 800.0, t)
+		var c_val = 0.18 if i % 2 == 0 else 0.14
+		var col = Color(c_val, c_val * 0.7, c_val * 0.4, 0.8)
+		var fork_col = Color(0.15, 0.5, 0.12, 0.9) if i % 2 == 0 else Color(0.1, 0.4, 0.08, 0.9)
+
+		if y >= cy:
+			var stripe = ColorRect.new()
+			stripe.size = Vector2(path_w, 2)
+			stripe.color = col
+			stripe.position = Vector2(cx - path_w / 2, y - 1)
+			marker.add_child(stripe)
+		else:
+			var depth_t = 1.0 - y / max(cy, 1.0)
+			var spread = lerp(40.0, 220.0, depth_t)
+			var arm_w = lerp(180.0, 50.0, depth_t)
+
+			var left = ColorRect.new()
+			left.size = Vector2(arm_w, 2)
+			left.color = fork_col
+			left.position = Vector2(cx - arm_w - spread, y - 1)
+			marker.add_child(left)
+
+			var right = ColorRect.new()
+			right.size = Vector2(arm_w, 2)
+			right.color = fork_col
+			right.position = Vector2(cx + spread, y - 1)
+			marker.add_child(right)
+
+	var center_dot = Area2D.new()
+	center_dot.name = "CenterDot"
+	center_dot.position = Vector2(cx, cy)
+
+	var dot_visual = ColorRect.new()
+	dot_visual.name = "DotVisual"
+	dot_visual.size = Vector2(16, 16)
+	dot_visual.color = Color(0.6, 0.2, 0.15, 0.95)
+	dot_visual.position = Vector2(-8, -8)
+	center_dot.add_child(dot_visual)
+
+	var dot_collision = CollisionShape2D.new()
+	var dot_shape = RectangleShape2D.new()
+	dot_shape.size = Vector2(60, 60)
+	dot_collision.shape = dot_shape
+	center_dot.add_child(dot_collision)
+
+	marker.add_child(center_dot)
+
+	var label = Label.new()
+	label.name = "ForkLabel"
+	label.text = "%d" % (idx + 1)
+	label.add_theme_font_size_override("font_size", 20)
+	label.add_theme_color_override("font_color", Color(0.95, 0.95, 0.8, 1))
+	label.position = Vector2(cx - 10, cy + 10)
+	label.z_index = 2
+	marker.add_child(label)
+
+	var glow = ColorRect.new()
+	glow.name = "Glow"
+	glow.size = Vector2(800, 600)
+	glow.color = Color(0.3, 0.05, 0.05, 0.06)
+	glow.position = Vector2(cx - 400, 0)
+	glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	marker.add_child(glow)
+	marker.move_child(glow, 0)
+
+	crossroad_markers.append(marker)
+
+func _light_crossroad(outcome_difficulty: int) -> void:
+	if current_crossroad_index <= 0:
+		return
+	var idx = current_crossroad_index - 1
+	if idx >= crossroad_markers.size():
+		return
+	var marker = crossroad_markers[idx]
+	var center_dot = marker.get_node_or_null("CenterDot")
+	if not center_dot:
+		return
+	var dot_visual = center_dot.get_node_or_null("DotVisual")
+	if not dot_visual:
+		return
+
+	var lit_color: Color
+	var glow_color: Color
+	var cp = _get_crossroad_position(idx)
+	match outcome_difficulty:
+		RiddleManager.LevelDifficulty.EASY:
+			lit_color = Color(0.1, 0.95, 0.15, 1.0)
+			glow_color = Color(0.05, 0.9, 0.1, 0.5)
+		RiddleManager.LevelDifficulty.HARD:
+			lit_color = Color(0.95, 0.1, 0.1, 1.0)
+			glow_color = Color(0.9, 0.05, 0.05, 0.5)
+		RiddleManager.LevelDifficulty.NORMAL:
+			lit_color = Color(0.95, 0.7, 0.05, 1.0)
+			glow_color = Color(0.9, 0.6, 0.05, 0.5)
+
+	dot_visual.color = lit_color
+	for child in marker.get_children():
+		if child is ColorRect and child.name != "Glow" and child.name != "ForkLabel":
+			child.color = lit_color
+
+	var existing_glow = marker.get_node_or_null("Glow")
+	if existing_glow:
+		existing_glow.queue_free()
+	var new_glow = ColorRect.new()
+	new_glow.name = "Glow"
+	new_glow.size = Vector2(500, 700)
+	new_glow.color = glow_color
+	new_glow.position = Vector2(cp.x - 250, cp.y - 300)
+	new_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	marker.add_child(new_glow)
+	marker.move_child(new_glow, 0)
+
+func _mark_crossroad_completed() -> void:
+	if current_crossroad_index >= crossroad_count:
+		return
+	if current_crossroad_index < crossroad_markers.size():
+		var marker = crossroad_markers[current_crossroad_index]
+		var center_dot = marker.get_node_or_null("CenterDot")
+		var dot_visual = center_dot.get_node_or_null("DotVisual") if center_dot else null
+		if dot_visual:
+			dot_visual.color = Color(0.15, 0.85, 0.15, 0.95)
+		for child in marker.get_children():
+			if child is ColorRect and child.name != "Glow" and child.name != "ForkLabel":
+				child.color = Color(0.2, 0.7, 0.15, 0.6)
+	completed_crossroads.append(current_crossroad_index)
+	current_crossroad_index += 1
+	_generate_crossroad(current_crossroad_index)
+
+func _load_platformer_level() -> void:
+	if not platformer_scene:
+		return
+	if player_instance:
+		player_instance.queue_free()
+		player_instance = null
+	_stop_betaal_speaking()
+	platformer_instance = platformer_scene.instantiate()
+	var difficulty = GameManager.pending_level_difficulty
+	if platformer_instance.has_method("set_difficulty"):
+		platformer_instance.set_difficulty(difficulty)
+	add_child(platformer_instance)
+	platformer_instance.platformer_completed.connect(_on_platformer_completed)
+
+func _on_platformer_completed() -> void:
+	var outcome = GameManager.pending_level_difficulty
+	_cleanup_platformer()
+	_spawn_player()
+	_light_crossroad(outcome)
+	await get_tree().create_timer(2.0).timeout
+	GameManager.on_platformer_completed()
+
+func _cleanup_platformer() -> void:
+	if platformer_instance:
+		platformer_instance.queue_free()
+		platformer_instance = null
+
+func _update_day_night(delta: float) -> void:
+	if not _moonlight_node:
+		return
+	day_night_cycle_time += delta
+	var total_cycle = day_duration * 14.0
+	var cycle_progress = fmod(day_night_cycle_time, total_cycle) / total_cycle
+	var angle = cycle_progress * TAU
+	var intensity = 0.3 + 0.7 * (0.5 + 0.5 * cos(angle))
+	if _moonlight_node.has_method("set_energy"):
+		_moonlight_node.energy = intensity * 3.5
+	var amb_intensity = 0.05 + 0.15 * (0.5 + 0.5 * cos(angle + PI))
+	if _ambient_node and _ambient_node.has_method("set_ambient_energy"):
+		_ambient_node.ambient_energy = amb_intensity
+
 func _make_lit(item: CanvasItem) -> void:
 	var shader = load("res://addons/lit/shaders/lit_receiver_fast.gdshader")
 	if not shader:
@@ -1074,19 +1302,19 @@ func _setup_lighting() -> void:
 	if not ClassDB.class_exists(&"LitCanvasModulate"):
 		return
 
-	var ambient = LitCanvasModulate.new()
-	ambient.color = Color(0.04, 0.04, 0.12)
-	ambient.ambient_energy = 0.15
-	add_child(ambient)
+	_ambient_node = LitCanvasModulate.new()
+	_ambient_node.color = Color(0.04, 0.04, 0.12)
+	_ambient_node.ambient_energy = 0.15
+	add_child(_ambient_node)
 
-	var moonlight = LitDirectionalLight2D.new()
-	moonlight.color = Color(0.55, 0.65, 0.95)
-	moonlight.energy = 3.5
-	moonlight.shadow_enabled = true
-	moonlight.shadow_color = Color(0, 0, 0, 0.9)
-	moonlight.shadow_hardness = 0.5
-	moonlight.rotation = deg_to_rad(-35)
-	add_child(moonlight)
+	_moonlight_node = LitDirectionalLight2D.new()
+	_moonlight_node.color = Color(0.55, 0.65, 0.95)
+	_moonlight_node.energy = 3.5
+	_moonlight_node.shadow_enabled = true
+	_moonlight_node.shadow_color = Color(0, 0, 0, 0.9)
+	_moonlight_node.shadow_hardness = 0.5
+	_moonlight_node.rotation = deg_to_rad(-35)
+	add_child(_moonlight_node)
 
 	var pp = LitPostProcess.new()
 	pp.bloom_enabled = true
