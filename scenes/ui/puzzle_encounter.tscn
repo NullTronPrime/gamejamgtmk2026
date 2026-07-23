@@ -1,0 +1,88 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/puzzle_encounter.gd" id="1"]
+
+[sub_resource type="StyleBoxFlat" id="1"]
+bg_color = Color(0.05, 0.05, 0.1, 0.95)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_left = 8
+corner_radius_bottom_right = 8
+
+[node name="PuzzleEncounter" type="CanvasLayer"]
+script = ExtResource("1")
+layer = 30
+visible = false
+
+[node name="Panel" type="Panel" parent="."]
+anchor_left = 0.1
+anchor_top = 0.15
+anchor_right = 0.9
+anchor_bottom = 0.85
+theme_override_styles/panel = SubResource("1")
+
+[node name="QuestionLabel" type="RichTextLabel" parent="Panel"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 20.0
+offset_top = 20.0
+offset_right = -20.0
+offset_bottom = -300.0
+theme_override_font_sizes/normal_font_size = 20
+theme_override_colors/default_color = Color(0.95, 0.95, 0.9, 1)
+autowrap_mode = 2
+bbcode_enabled = true
+
+[node name="OptionContainer" type="VBoxContainer" parent="Panel"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 60.0
+offset_top = -290.0
+offset_right = -60.0
+offset_bottom = -20.0
+alignment = 1
+
+[node name="Option0" type="Button" parent="Panel/OptionContainer"]
+theme_override_font_sizes/font_size = 18
+custom_minimum_size = Vector2(0, 44)
+size_flags_horizontal = 3
+
+[node name="Option1" type="Button" parent="Panel/OptionContainer"]
+theme_override_font_sizes/font_size = 18
+custom_minimum_size = Vector2(0, 44)
+size_flags_horizontal = 3
+
+[node name="Option2" type="Button" parent="Panel/OptionContainer"]
+theme_override_font_sizes/font_size = 18
+custom_minimum_size = Vector2(0, 44)
+size_flags_horizontal = 3
+
+[node name="Option3" type="Button" parent="Panel/OptionContainer"]
+theme_override_font_sizes/font_size = 18
+custom_minimum_size = Vector2(0, 44)
+size_flags_horizontal = 3
+
+[node name="MicInstruction" type="Label" parent="Panel"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 20.0
+offset_top = -80.0
+offset_right = -20.0
+offset_bottom = -50.0
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(0.9, 0.9, 0.9, 1)
+horizontal_alignment = 1
+vertical_alignment = 1
+visible = false
+
+[node name="MicMeter" type="TextureProgressBar" parent="Panel"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 20.0
+offset_top = -45.0
+offset_right = -20.0
+offset_bottom = -25.0
+visible = false
+value = 0.0
+tint_progress = Color(1, 0.3, 0.3, 1)
+tint_under = Color(0.2, 0.1, 0.1, 1)
