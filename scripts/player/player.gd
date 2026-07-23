@@ -32,18 +32,22 @@ signal sprint_energy_changed(value: float)
 @onready var betaal: Node2D = $Visual/BetaalPosition/Betaal
 @onready var collision: CollisionShape2D = $CollisionShape2D
 
+# ---- rig / walk-cycle state ----
+var _rig: Dictionary = {}
+var _walk_phase: float = 0.0
+var _walk_blend: float = 0.0
+const WALK_SWING_DEG: float = 32.0
+const WALK_CYCLE_SPEED: float = 9.0
+
 func _ready() -> void:
 	GameManager.state_changed.connect(_on_game_state_changed)
-	var body = Polygon2D.new()
-	body.polygon = PackedVector2Array([Vector2(-8, -24), Vector2(8, -24), Vector2(12, 0), Vector2(8, 24), Vector2(-8, 24), Vector2(-12, 0)])
-	body.color = Color(0.2, 0.5, 0.9)
-	visual.add_child(body)
-	var head = Polygon2D.new()
-	head.polygon = PackedVector2Array([Vector2(-6, -32), Vector2(6, -32), Vector2(8, -24), Vector2(-8, -24)])
-	head.color = Color(0.85, 0.7, 0.55)
-	visual.add_child(head)
-	_make_lit(body)
-	_make_lit(head)
+
+	# Neutral "placeholder" stick-figure body for Vikram (Betaal, the one being
+	# carried, is the blue figure - see betaal.gd).
+	_rig = HumanoidRig.build(visual, Color(0.78, 0.78, 0.8), Color(0.85, 0.7, 0.55))
+	for p in _rig["polygons"]:
+		_make_lit(p)
+
 	for i in 4:
 		var s = load("res://assets/audio/sfx/footstep/forestfs%d.wav" % (i + 1))
 		if s:
@@ -70,6 +74,7 @@ func _physics_process(delta: float) -> void:
 		velocity.x = move_toward(velocity.x, 0.0, friction * delta)
 		velocity.y = move_toward(velocity.y, 0.0, friction * delta)
 		move_and_slide()
+		_animate_rig(delta, false, on_ground)
 		return
 
 	var h_dir := Input.get_axis("move_left", "move_right")
@@ -105,8 +110,11 @@ func _physics_process(delta: float) -> void:
 
 	move_and_slide()
 
-	if h_dir != 0 or v_dir != 0:
-		var is_running = wants_to_sprint or speed_multiplier > 1.0
+	var is_moving = h_dir != 0 or v_dir != 0
+	var is_running = wants_to_sprint or speed_multiplier > 1.0
+	_animate_rig(delta, is_moving, on_ground, is_running)
+
+	if is_moving:
 		var interval = 0.3 if is_running else 0.5
 		_footstep_timer += delta
 		if _footstep_timer >= interval:
@@ -135,3 +143,42 @@ func _make_lit(item: CanvasItem) -> void:
 	var mat = ShaderMaterial.new()
 	mat.shader = shader
 	item.material = mat
+
+func _animate_rig(delta: float, is_moving: bool, on_ground: bool, is_running: bool = false) -> void:
+	if _rig.is_empty():
+		return
+
+	var target_blend = 1.0 if (is_moving and on_ground) else 0.0
+	_walk_blend = move_toward(_walk_blend, target_blend, delta * 6.0)
+
+	if is_moving and on_ground:
+		_walk_phase += delta * WALK_CYCLE_SPEED * (1.4 if is_running else 1.0)
+
+	var swing = sin(_walk_phase) * deg_to_rad(WALK_SWING_DEG) * _walk_blend
+	var lift_l = max(0.0, -sin(_walk_phase)) * deg_to_rad(40.0) * _walk_blend
+	var lift_r = max(0.0, sin(_walk_phase)) * deg_to_rad(40.0) * _walk_blend
+
+	_rig["l_hip"].rotation = swing
+	_rig["r_hip"].rotation = -swing
+	_rig["l_knee"].rotation = lift_l
+	_rig["r_knee"].rotation = lift_r
+
+	_rig["l_shoulder"].rotation = -swing * 0.6
+	_rig["r_shoulder"].rotation = swing * 0.6
+	_rig["l_elbow"].rotation = abs(swing) * 0.25
+	_rig["r_elbow"].rotation = abs(swing) * 0.25
+
+	if not on_ground:
+		var tuck = deg_to_rad(18.0)
+		_rig["l_hip"].rotation = lerp(_rig["l_hip"].rotation, tuck, delta * 10.0)
+		_rig["r_hip"].rotation = lerp(_rig["r_hip"].rotation, tuck, delta * 10.0)
+		_rig["l_knee"].rotation = lerp(_rig["l_knee"].rotation, deg_to_rad(35.0), delta * 10.0)
+		_rig["r_knee"].rotation = lerp(_rig["r_knee"].rotation, deg_to_rad(35.0), delta * 10.0)
+
+	if _walk_blend < 0.05:
+		var bob = sin(Time.get_ticks_msec() / 1000.0 * 1.6) * 0.5
+		_rig["torso"].position.y = bob
+		_rig["head"].position.y = bob
+	else:
+		_rig["torso"].position.y = 0.0
+		_rig["head"].position.y = 0.0

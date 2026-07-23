@@ -58,7 +58,7 @@ anchor_right = 0.85
 anchor_bottom = 0.7
 theme_override_font_sizes/normal_font_size = 22
 theme_override_colors/default_color = Color(0.9, 0.9, 0.9, 1)
-text = "[center]Deep in an ancient forest, Vikram the King of Shadows carries the spirit Betaal upon his back.\n\nThe spirit speaks in riddles and paradoxes, demanding answers as the price of passage.\n\nAn hourglass counts down the time... solve enough riddles before time runs out, or Betaal returns to his tree and the journey begins anew.[/center]"
+text = "sampletext"
 
 [node name="SkipButton" type="Button" parent="."]
 anchor_left = 0.8

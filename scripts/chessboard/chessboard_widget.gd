@@ -156,7 +156,6 @@ func _gui_input(event: InputEvent) -> void:
 				_drag_label.z_index = 0
 				var target_sq := _pos_to_square(mouse_pos)
 				if target_sq >= 0 and target_sq != _drag_from_sq and board[target_sq] == ".":
-					_highlight.visible = false
 					move_made.emit(_drag_from_sq, target_sq)
 					_check_move(_drag_from_sq, target_sq)
 				else:
@@ -206,6 +205,7 @@ func _check_move(from_sq: int, to_sq: int) -> void:
 		await get_tree().create_timer(1.2).timeout
 		_result_overlay.modulate.a = 0.0
 		_input_locked = false
+		_update_layout()
 		puzzle_completed.emit(false)
 
 func _build_move_animation(from_sq: int, to_sq: int) -> void:

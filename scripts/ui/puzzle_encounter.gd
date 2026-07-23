@@ -53,24 +53,28 @@ func _on_option_pressed(index: int) -> void:
 		var correct = category == RiddleManager.Category.RIGHT
 		GameManager.on_second_riddle_completed(correct)
 		hide_puzzle()
+		puzzle_result.emit(correct)
 		return
 	match category:
 		RiddleManager.Category.RIGHT:
 			_reset_camera_zoom()
 			GameManager.on_riddle_answered(RiddleManager.Category.RIGHT)
 			hide_puzzle()
+			puzzle_result.emit(true)
 		RiddleManager.Category.WRONG:
 			_reset_camera_zoom()
 			var second = RiddleManager.get_second_riddle()
 			if second.is_empty():
 				GameManager.on_riddle_answered(RiddleManager.Category.FALSE)
 				hide_puzzle()
+				puzzle_result.emit(false)
 			else:
 				show_riddle(second, true)
 		RiddleManager.Category.FALSE:
 			_reset_camera_zoom()
 			GameManager.on_riddle_answered(RiddleManager.Category.FALSE)
 			hide_puzzle()
+			puzzle_result.emit(false)
 
 func _reset_camera_zoom() -> void:
 	var forest = get_node_or_null("/root/Game/ForestLevel")

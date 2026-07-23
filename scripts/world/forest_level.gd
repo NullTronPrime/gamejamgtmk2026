@@ -771,60 +771,97 @@ func _inject_environment_questions() -> void:
 
 func _add_new_riddles() -> void:
 	RiddleManager.add_riddle(
-		"I hold a sword in one hand and a dagger in the other. The sword strikes true. The dagger strikes swift. Which do you reach for, King?",
-		"The sword", "The dagger", "Both", "Neither",
+		"sample text",
+		"sample text", "sample text", "sample text", "sample text",
 		RiddleManager.PuzzleType.PARADOX,
-		"A leader's strength is not the sharpness of blade, but the firmness of hand.",
-		"You chose the tool of assassination. A king holds the sword high, not low."
+		"sample text",
+		"sample text"
 	)
 	RiddleManager.add_riddle(
-		"A flower blooms in darkness. Does it need the sun to be beautiful?",
-		"No, its beauty is its own", "Yes, all life needs light", "The flower does not care", "Darkness is the only truth",
+		"sample text",
+		"sample text", "sample text", "sample text", "sample text",
 		RiddleManager.PuzzleType.PARADOX,
-		"Wisdom. The flower does not seek the sun's approval. Neither should a king.",
-		"You measure worth by what illuminates it. Vanity, King."
+		"sample text",
+		"sample text"
 	)
 	RiddleManager.add_riddle(
-		"Betaal asks: Do you, King, believe yourself to be a just man?",
-		"I am just", "I am not", "Justice is a lie", "The people decide",
+		"sample text",
+		"sample text", "sample text", "sample text", "sample text",
 		RiddleManager.PuzzleType.PARADOX,
-		"Confidence befits a king. Let us see if your actions match your words.",
-		"Doubt is the first poison. You have drunk it willingly."
+		"sample text",
+		"sample text"
 	)
 	RiddleManager.add_riddle(
-		"A widow weeps at the gate. Her son was taken for a debt he did not owe. Do you free him and defy the law, or leave him and keep order?",
-		"Free him", "Leave him", "Hear the widow's plea", "Execute the debtor too",
+		"sample text",
+		"sample text", "sample text", "sample text", "sample text",
 		RiddleManager.PuzzleType.PARADOX,
-		"A king's heart sees beyond the law. You have passed the test of mercy.",
-		"The law without heart is a cage. You have locked yourself in it."
+		"sample text",
+		"sample text"
 	)
 	RiddleManager.add_riddle(
-		"The village baker gives bread to the poor without counting the cost. Is he generous or foolish?",
-		"Generous", "Foolish", "Both", "Neither matters",
+		"sample text",
+		"sample text", "sample text", "sample text", "sample text",
 		RiddleManager.PuzzleType.OBSERVATION,
-		"Generosity without expectation is the rarest coin. You see truly.",
-		"You measure kindness by its cost. Your ledger is cold, King."
+		"sample text",
+		"sample text"
 	)
 	RiddleManager.add_riddle(
-		"Two paths lie before you. One is smooth and paved. The other is cracked and overgrown. Which do you walk?",
-		"The cracked path", "The smooth path", "Neither, make my own", "Walk both at once",
+		"sample text",
+		"sample text", "sample text", "sample text", "sample text",
 		RiddleManager.PuzzleType.OBSERVATION,
-		"A king does not follow the easy road. He forges the forgotten one.",
-		"Comfort is the thief of greatness. You walked into the trap."
+		"sample text",
+		"sample text"
 	)
 	RiddleManager.add_riddle(
-		"Betaal whispers: I see three coins in your pocket. One is a lie, one is a truth, and one is a memory. Which do you spend first?",
-		"The memory", "The lie", "The truth", "Spend none of them",
+		"sample text",
+		"sample text", "sample text", "sample text", "sample text",
 		RiddleManager.PuzzleType.OBSERVATION,
-		"Memories make a king. Spend them wisely, and they multiply.",
-		"You chose deceit first. Your treasury is empty already."
+		"sample text",
+		"sample text"
 	)
 	RiddleManager.add_riddle(
-		"A crow watches you from a dead branch. It has seen you pass three times. What does it know that you do not?",
-		"That the path is a circle", "That you are being followed", "That the forest is burning", "Nothing, it is a bird",
+		"sample text",
+		"sample text", "sample text", "sample text", "sample text",
 		RiddleManager.PuzzleType.OBSERVATION,
-		"The crow sees what you refuse to: every end is a beginning.",
-		"You see only what you want to see. The forest remains a maze."
+		"sample text",
+		"sample text"
+	)
+
+	# Miro board riddles
+	RiddleManager.add_riddle(
+		"Who should the bride now consider as her husband — the man who has Suryamal's head, or Suryamal's body?",
+		"The man with Suryamal's head", "The man with Suryamal's body", "Neither", "Both are the same man",
+		RiddleManager.PuzzleType.PARADOX,
+		"A man is known by his head, not his limbs. You see the truth clearly.",
+		"You severed the head from the man. A king must keep his wits together."
+	)
+	RiddleManager.add_riddle(
+		"Between King Rupsen and Virvar, whose sacrifice is greater?",
+		"King Rupsen's", "Virvar's", "Both are equal", "Neither made a sacrifice",
+		RiddleManager.PuzzleType.PARADOX,
+		"A king who gives all for his people is the greatest of all. You know the measure of sacrifice.",
+		"You weigh gifts by their glitter, not their cost. A king must sacrifice more than coin."
+	)
+	RiddleManager.add_riddle(
+		"Why does the thief cry and laugh simultaneously after hearing the declaration of the Rich Man?",
+		"He laughs at mercy and weeps at his crimes", "He laughs at the reward and weeps at the punishment", "He laughs from madness and weeps from fear", "He does neither — it is a trick",
+		RiddleManager.PuzzleType.PARADOX,
+		"The thief weeps for what he stole and laughs for what he escaped. You understand the two faces of justice.",
+		"You see only one side of the coin. Justice has two faces, King."
+	)
+	RiddleManager.add_riddle(
+		"What must the king legislate?",
+		"That which protects the weak", "That which strengthens the throne", "That which pleases the gods", "Nothing — law is a cage",
+		RiddleManager.PuzzleType.PARADOX,
+		"A king's law is the shield of the helpless. You would make a wise legislator.",
+		"Laws for the throne alone are chains on the people. A king rules for all, not for himself."
+	)
+	RiddleManager.add_riddle(
+		"Will Nageshwari kill Prince Shaktinath?",
+		"Yes, fate cannot be escaped", "No, love conquers all", "She will try and fail", "The snake will spare him",
+		RiddleManager.PuzzleType.PARADOX,
+		"You see the fangs of fate but recognize the antidote of choice. A king bends destiny.",
+		"Fate is a snake that strikes the careless king. You stepped into its path."
 	)
 
 	RiddleManager.add_second_riddle(
@@ -862,12 +899,11 @@ func _on_game_state_changed(new_state: int) -> void:
 	match new_state:
 		GameManager.GameState.PLAYING:
 			_spawn_player()
-			puzzle_timer.start()
+			is_waiting_for_response = false
 			hud.get_node("Panel/WarningLabel").visible = false
 			reset_cutscene.visible = false
 			if platformer_instance:
 				_cleanup_platformer()
-			_mark_crossroad_completed()
 		GameManager.GameState.PUZZLE:
 			puzzle_timer.stop()
 		GameManager.GameState.SECOND_PUZZLE:
@@ -892,6 +928,22 @@ func _on_puzzle_timer_timeout() -> void:
 		return
 	_trigger_betaal_riddle()
 
+func _on_crossroad_trigger_entered(body: Node2D, crossroad_idx: int) -> void:
+	if body != player_instance:
+		return
+	if crossroad_idx != current_crossroad_index:
+		return
+	if is_waiting_for_response:
+		return
+	if GameManager.state != GameManager.GameState.PLAYING:
+		return
+	if completed_crossroads.has(crossroad_idx):
+		return
+	var trigger_node = crossroad_markers[crossroad_idx].get_node_or_null("CenterDot")
+	if trigger_node:
+		trigger_node.set_deferred("monitoring", false)
+	_trigger_betaal_riddle()
+
 func _trigger_betaal_riddle() -> void:
 	is_waiting_for_response = true
 	current_riddle_data = RiddleManager.get_random_riddle()
@@ -900,7 +952,11 @@ func _trigger_betaal_riddle() -> void:
 		return
 
 	if current_crossroad_index < crossroad_markers.size():
-		crossroad_markers[current_crossroad_index].visible = true
+		var mk = crossroad_markers[current_crossroad_index]
+		mk.modulate = Color(1, 1, 1, 0)
+		mk.visible = true
+		var reveal = create_tween()
+		reveal.tween_property(mk, "modulate", Color(1, 1, 1, 1), 0.6).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
 
 	GameManager.trigger_puzzle()
 	GameManager.puzzle_type_changed.emit(current_riddle_data.get("puzzle_type", 0))
@@ -1105,31 +1161,20 @@ func _generate_crossroad(idx: int) -> void:
 	marker.visible = false
 	add_child(marker)
 
-	var wall = StaticBody2D.new()
-	wall.name = "Wall"
-	wall.position = Vector2(cx, 500)
-	var wall_coll = CollisionShape2D.new()
-	var wall_shape = RectangleShape2D.new()
-	wall_shape.size = Vector2(20, 200)
-	wall_coll.shape = wall_shape
-	wall.add_child(wall_coll)
-	add_child(wall)
-
 	var stripe_count = 40
 	var road_max_y = 600.0
+	var dark_col = Color(0.02, 0.015, 0.01, 0.8)
+	var dark_fork = Color(0.015, 0.025, 0.01, 0.85)
 
 	for i in range(stripe_count):
 		var t = float(i) / float(stripe_count - 1)
 		var y = t * road_max_y
 		var path_w = lerp(200.0, 800.0, t)
-		var c_val = 0.18 if i % 2 == 0 else 0.14
-		var col = Color(c_val, c_val * 0.7, c_val * 0.4, 0.8)
-		var fork_col = Color(0.15, 0.5, 0.12, 0.9) if i % 2 == 0 else Color(0.1, 0.4, 0.08, 0.9)
 
 		if y >= cy:
 			var stripe = ColorRect.new()
 			stripe.size = Vector2(path_w, 2)
-			stripe.color = col
+			stripe.color = dark_col
 			stripe.position = Vector2(cx - path_w / 2, y - 1)
 			marker.add_child(stripe)
 		else:
@@ -1139,34 +1184,44 @@ func _generate_crossroad(idx: int) -> void:
 
 			var left = ColorRect.new()
 			left.size = Vector2(arm_w, 2)
-			left.color = fork_col
+			left.color = dark_fork
 			left.position = Vector2(cx - arm_w - spread, y - 1)
 			marker.add_child(left)
 
 			var right = ColorRect.new()
 			right.size = Vector2(arm_w, 2)
-			right.color = fork_col
+			right.color = dark_fork
 			right.position = Vector2(cx + spread, y - 1)
 			marker.add_child(right)
 
-	var center_dot = Area2D.new()
-	center_dot.name = "CenterDot"
-	center_dot.position = Vector2(cx, cy)
+	var trigger = Area2D.new()
+	trigger.name = "CenterDot"
+	trigger.position = Vector2(cx, cy)
 
 	var dot_visual = ColorRect.new()
 	dot_visual.name = "DotVisual"
 	dot_visual.size = Vector2(16, 16)
 	dot_visual.color = Color(0.6, 0.2, 0.15, 0.95)
 	dot_visual.position = Vector2(-8, -8)
-	center_dot.add_child(dot_visual)
+	trigger.add_child(dot_visual)
 
-	var dot_collision = CollisionShape2D.new()
-	var dot_shape = RectangleShape2D.new()
-	dot_shape.size = Vector2(60, 60)
-	dot_collision.shape = dot_shape
-	center_dot.add_child(dot_collision)
+	var band_collision = CollisionShape2D.new()
+	var band_shape = RectangleShape2D.new()
+	band_shape.size = Vector2(800, 600)
+	band_collision.shape = band_shape
+	band_collision.position = Vector2(0, 300 - cy)
+	trigger.add_child(band_collision)
 
-	marker.add_child(center_dot)
+	trigger.collision_mask = 1
+	trigger.body_entered.connect(_on_crossroad_trigger_entered.bind(idx))
+
+	var band_debug = ColorRect.new()
+	band_debug.size = Vector2(800, 600)
+	band_debug.color = Color(1, 0, 0, 0.05)
+	band_debug.position = Vector2(-400, -cy)
+	trigger.add_child(band_debug)
+
+	marker.add_child(trigger)
 
 	var label = Label.new()
 	label.name = "ForkLabel"
@@ -1189,10 +1244,8 @@ func _generate_crossroad(idx: int) -> void:
 	crossroad_markers.append(marker)
 
 func _light_crossroad(outcome_difficulty: int) -> void:
-	if current_crossroad_index <= 0:
-		return
 	var idx = current_crossroad_index - 1
-	if idx >= crossroad_markers.size():
+	if idx < 0 or idx >= crossroad_markers.size():
 		return
 	var marker = crossroad_markers[idx]
 	var center_dot = marker.get_node_or_null("CenterDot")
@@ -1218,7 +1271,9 @@ func _light_crossroad(outcome_difficulty: int) -> void:
 
 	dot_visual.color = lit_color
 	for child in marker.get_children():
-		if child is ColorRect and child.name != "Glow" and child.name != "ForkLabel":
+		if child.name == "Glow" or child.name == "ForkLabel":
+			continue
+		if child is ColorRect:
 			child.color = lit_color
 
 	var existing_glow = marker.get_node_or_null("Glow")
@@ -1243,7 +1298,9 @@ func _mark_crossroad_completed() -> void:
 		if dot_visual:
 			dot_visual.color = Color(0.15, 0.85, 0.15, 0.95)
 		for child in marker.get_children():
-			if child is ColorRect and child.name != "Glow" and child.name != "ForkLabel":
+			if child.name == "Glow" or child.name == "ForkLabel":
+				continue
+			if child is ColorRect:
 				child.color = Color(0.2, 0.7, 0.15, 0.6)
 	completed_crossroads.append(current_crossroad_index)
 	current_crossroad_index += 1
@@ -1252,27 +1309,40 @@ func _mark_crossroad_completed() -> void:
 func _load_platformer_level() -> void:
 	if not platformer_scene:
 		return
+	if get_tree().root.has_node("Transition"):
+		await Transition.cover("fade", 0.35)
 	if player_instance:
 		player_instance.queue_free()
 		player_instance = null
 	_stop_betaal_speaking()
+	visible = false
 	platformer_instance = platformer_scene.instantiate()
 	var difficulty = GameManager.pending_level_difficulty
 	if platformer_instance.has_method("set_difficulty"):
 		platformer_instance.set_difficulty(difficulty)
-	add_child(platformer_instance)
+	get_tree().root.add_child(platformer_instance)
 	platformer_instance.platformer_completed.connect(_on_platformer_completed)
+	if get_tree().root.has_node("Transition"):
+		await Transition.reveal("fade", 0.35)
 
 func _on_platformer_completed() -> void:
 	var outcome = GameManager.pending_level_difficulty
+	if get_tree().root.has_node("Transition"):
+		await Transition.cover("fade", 0.35)
 	_cleanup_platformer()
+	visible = true
 	_spawn_player()
 	_light_crossroad(outcome)
+	_mark_crossroad_completed()
+	if get_tree().root.has_node("Transition"):
+		await Transition.reveal("fade", 0.35)
 	await get_tree().create_timer(2.0).timeout
 	GameManager.on_platformer_completed()
 
 func _cleanup_platformer() -> void:
 	if platformer_instance:
+		if platformer_instance.get_parent():
+			platformer_instance.get_parent().remove_child(platformer_instance)
 		platformer_instance.queue_free()
 		platformer_instance = null
 

@@ -117,6 +117,61 @@ The board is organized into labelled section-shapes with items inside each area.
 
 ---
 
-## Instructions Note
+## INSTRUCTIONS
 
 > x=55.9 y=-544.4: "circles are questions put your answers in sticky notes (yellow)"
+
+---
+
+## NEW 2026-07-23 — Riddle Themes & Levels
+
+### Riddle Questions (y≈1057)
+
+| Item | Position | Theme |
+|------|----------|-------|
+| [SHAPE] who should the bride now consider as her husband; the man who has Suryamal's head or Suryamal's body? | x=487.5 y=1057.6 | — |
+| [SHAPE] Between King Rupsen and Virvar whose sacrifice is greater? | x=997.0 y=1057.6 | — |
+| [SHAPE] Why the thief cries and laughs simultaneously after hearing the declaration of the Rich Man? | x=1400.5 y=1057.6 | **inequality** |
+| [SHAPE] What must the king legislate? | x=1857.2 y=1057.6 | **legality** |
+| [SHAPE] Will Nageshwari kill Princ Shaktinath? | x=2313.8 y=1057.6 | **snakes** |
+| [SHAPE] (regular forest level) | x=2770.5 y=1057.6 | **gloom forest** |
+
+### Row 2 — Theme Labels (y≈1293-1355)
+
+| Item | Position |
+|------|----------|
+| [SHAPE] upside down | x=487.5 y=1293.6 |
+| [SHAPE] inequality | x=1400.5 y=1293.6 |
+| [SHAPE] duality | x=1000.5 y=1305.8 |
+| [SHAPE] legality | x=1857.2 y=1338.5 |
+| [SHAPE] snakes | x=2313.8 y=1346.4 |
+| [SHAPE] gloom forest | x=2770.0 y=1355.3 |
+
+### Upper Labels (y≈381)
+
+| Item | Position |
+|------|----------|
+| [SHAPE] Why was Knowledge Wasted | x=1992.9 y=381.5 |
+| [SHAPE] library | x=2425.1 y=381.5 |
+
+### Header
+
+| Item | Position | Notes |
+|------|----------|-------|
+| [SHAPE] **levels** (large, size 64) | x=1136.6 y=546.5 | New section header for level/riddle design |
+
+### Sticky Notes
+
+| Item | Position | Content |
+|------|----------|---------|
+| STICKY | x=639.7 y=20.1 | walking, climbing obstacles, breaking twigs (by interacting) |
+| STICKY | x=236.5 y=-40.3 | Occasional taunts from Betaal to disrupt Vikram from his way. Could give false navigations or try to make him trip by distracting him. (will add dialogue lines in a bit) |
+| STICKY | x=511.4 y=249.7 | dark, gloomy (even light rain perhaps, if viable) |
+| STICKY | x=1209.4 y=-791.5 | puzzle aspect of quizzes concern (written quiz is frustrating). possibly collect important items during rogue like phase |
+
+### New Shapes
+
+| Item | Position |
+|------|----------|
+| [SHAPE] footsteps | x=-797.0 y=-918.8 |
+| [SHAPE] jump | x=-967.1 y=-754.4 |

@@ -6,11 +6,17 @@ var current_state: int = BetaalState.IDLE
 
 var _speak_tween: Tween
 var _bubble: Sprite2D
+var _rig: Dictionary = {}
 
 @onready var player: CharacterBody2D = owner
 
 func _ready() -> void:
 	GameManager.state_changed.connect(_on_game_state_changed)
+
+	scale = Vector2(0.78, 0.78)
+	_rig = HumanoidRig.build(self, Color(0.22, 0.4, 0.95), Color(0.35, 0.5, 0.95))
+	_pose_piggyback()
+
 	_bubble = Sprite2D.new()
 	_bubble.name = "SpeechBubble"
 	_bubble.texture = preload("res://addons/at-icons/node3d/speech_bubble_question.svg")
@@ -20,26 +26,18 @@ func _ready() -> void:
 	_bubble.visible = false
 	add_child(_bubble)
 
-func _draw() -> void:
-	var ghost_color = Color(0.8, 0.2, 0.2, 0.9)
-	var points = PackedVector2Array([
-		Vector2(0, -20),
-		Vector2(12, -12),
-		Vector2(14, 4),
-		Vector2(10, 16),
-		Vector2(6, 10),
-		Vector2(2, 20),
-		Vector2(-2, 10),
-		Vector2(-6, 20),
-		Vector2(-10, 10),
-		Vector2(-14, 4),
-		Vector2(-12, -12),
-	])
-	draw_colored_polygon(points, ghost_color)
-	draw_circle(Vector2(-5, -8), 3, Color(1, 1, 1, 0.9))
-	draw_circle(Vector2(5, -8), 3, Color(1, 1, 1, 0.9))
-	draw_circle(Vector2(-5, -8), 1.5, Color(0.1, 0.1, 0.1))
-	draw_circle(Vector2(5, -8), 1.5, Color(0.1, 0.1, 0.1))
+func _pose_piggyback() -> void:
+	if _rig.is_empty():
+		return
+	_rig["l_shoulder"].rotation = deg_to_rad(100)
+	_rig["r_shoulder"].rotation = deg_to_rad(100)
+	_rig["l_elbow"].rotation = deg_to_rad(75)
+	_rig["r_elbow"].rotation = deg_to_rad(75)
+
+	_rig["l_hip"].rotation = deg_to_rad(75)
+	_rig["r_hip"].rotation = deg_to_rad(75)
+	_rig["l_knee"].rotation = deg_to_rad(95)
+	_rig["r_knee"].rotation = deg_to_rad(95)
 
 func _on_game_state_changed(new_state: int) -> void:
 	if new_state == GameManager.GameState.RESET:
@@ -59,7 +57,7 @@ func _play_fly_away() -> void:
 func reappear() -> void:
 	visible = true
 	modulate = Color.WHITE
-	scale = Vector2(1, 1)
+	scale = Vector2(0.78, 0.78)
 	position = Vector2.ZERO
 	current_state = BetaalState.IDLE
 	_bubble.visible = false
