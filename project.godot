@@ -28,7 +28,9 @@ MicManager="*res://scripts/autoload/mic_manager.gd"
 ControllerIcons="*uid://c38isumnwsqg8"
 LitManager="*uid://brf2hvdtyyw3q"
 Save="*uid://en34tojocj5f"
+PhantomCameraManager="*res://addons/phantom_camera/scripts/managers/phantom_camera_manager.gd"
 Transition="*uid://bumubpvh62b0y"
+RoomGrid="*res://scripts/room/room_grid.gd"
 
 [display]
 
@@ -43,7 +45,7 @@ movie_writer/movie_file="C:/Users/ragav/Documents/GAMEJAM/vikram-and-betaal-gmae
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/PlantGenerator/plugin.cfg", "res://addons/controller_icons/plugin.cfg", "res://addons/lit/plugin.cfg", "res://addons/saltmire_save_lite/plugin.cfg", "res://addons/saltmire_transitions/plugin.cfg")
+enabled=PackedStringArray("res://addons/PlantGenerator/plugin.cfg", "res://addons/controller_icons/plugin.cfg", "res://addons/lit/plugin.cfg", "res://addons/phantom_camera/plugin.cfg", "res://addons/saltmire_save_lite/plugin.cfg", "res://addons/saltmire_transitions/plugin.cfg")
 
 [input]
 

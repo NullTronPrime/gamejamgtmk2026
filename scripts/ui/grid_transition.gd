@@ -28,6 +28,8 @@ func _ready() -> void:
 	_spiral_mat.set_shader_parameter("twist", 6.0)
 	_spiral_mat.set_shader_parameter("edge_softness", 0.04)
 	_spiral_mat.set_shader_parameter("grid_size", Vector2(64, 36))
+	var vs := DisplayServer.window_get_size()
+	_spiral_mat.set_shader_parameter("pixel_size", Vector2(1.0 / vs.x, 1.0 / vs.y))
 	_spiral_overlay = ColorRect.new()
 	_spiral_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_spiral_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)

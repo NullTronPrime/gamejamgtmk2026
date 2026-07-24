@@ -1,9 +1,12 @@
 extends Node
 
+const GridTrans := preload("res://scripts/ui/grid_transition.gd")
+
 var title_screen: CanvasLayer
 var intro_cutscene: CanvasLayer
 var forest_level: Node2D
 var options_menu: CanvasLayer
+var room_level: Node2D
 
 func _ready() -> void:
 	_show_title()
@@ -78,3 +81,28 @@ func _show_ending() -> void:
 	label.anchor_bottom = 0.7
 	label.add_theme_font_size_override("font_size", 28)
 	ending.add_child(label)
+
+
+func enter_room() -> void:
+	if room_level:
+		return
+	if not GridTrans.is_available() or GridTrans.is_busy():
+		return
+	await GridTrans.cover(0.8)
+	if forest_level:
+		forest_level.visible = false
+		forest_level.process_mode = PROCESS_MODE_DISABLED
+	room_level = preload("res://scenes/world/room_level.tscn").instantiate()
+	add_child(room_level)
+
+
+func exit_room() -> void:
+	if not room_level:
+		return
+	room_level.queue_free()
+	room_level = null
+	if forest_level:
+		forest_level.visible = true
+		forest_level.process_mode = PROCESS_MODE_INHERIT
+	if GridTrans.is_available() and not GridTrans.is_busy():
+		GridTrans.reveal(0.8)

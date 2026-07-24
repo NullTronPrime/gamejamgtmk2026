@@ -9,3 +9,10 @@ export_presets.cfg
 .DS_Store
 Thumbs.db
 recordings/
+
+# Junk / test files
+example/
+animated_human_skeleton_2d.*
+human_skeleton_2d.tscn
+LICENSE
+LICENSE.txt

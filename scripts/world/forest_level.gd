@@ -356,8 +356,6 @@ var _observation_scan_timer: float = 0.0
 var _chunk_gen_timer: float = 0.0
 var _parallax_layers: Array[Dictionary] = []
 
-var platformer_scene: PackedScene
-var platformer_instance: Node
 var crossroad_markers: Array[Node2D] = []
 var completed_crossroads: Array[int] = []
 var crossroad_count: int = 6
@@ -368,6 +366,14 @@ var _crossroad_enabled: Array[bool] = []
 var day_night_cycle_time: float = 0.0
 var _moonlight_node: Node
 var _ambient_node: Node
+var _warm_light: Node
+var _cool_light: Node
+var _light_drift_time: float = 0.0
+var _firefly_particles: GPUParticles2D
+
+# PhantomCamera
+var _follow_pcam: PhantomCamera2D
+var _puzzle_pcam: PhantomCamera2D
 
 @onready var puzzle_timer: Timer = $PuzzleTriggerTimer
 @onready var player_start: Marker2D = $PlayerStart
@@ -394,7 +400,6 @@ func _ready() -> void:
 	_add_leaf_litter()
 
 	player_scene = preload("res://scenes/player.tscn")
-	platformer_scene = preload("res://scenes/world/platformer_level.tscn")
 	hud = preload("res://scenes/ui/hud.tscn").instantiate()
 	dialogue_box = preload("res://scenes/ui/dialogue_box.tscn").instantiate()
 	puzzle_encounter = preload("res://scenes/ui/puzzle_encounter.tscn").instantiate()
@@ -426,12 +431,60 @@ func _ready() -> void:
 	get_tree().root.add_child(st)
 	var gt := GridTrans.new()
 	get_tree().root.add_child(gt)
+	_setup_phantom_camera()
+	GameManager.save_requested.connect(_on_save_requested)
+	GameManager.load_completed.connect(_on_load_completed)
 	GameManager.start_run()
+
+func _setup_phantom_camera() -> void:
+	if not ClassDB.class_exists(&"PhantomCamera2D"):
+		return
+
+	var tween_res := PhantomCameraTween.new()
+	tween_res.duration = 0.8
+	tween_res.transition = PhantomCameraTween.TransitionType.SINE
+	tween_res.ease = PhantomCameraTween.EaseType.EASE_OUT
+
+	_follow_pcam = PhantomCamera2D.new()
+	_follow_pcam.name = "FollowPCam"
+	_follow_pcam.priority = 5
+	_follow_pcam.follow_mode = PhantomCamera2D.FollowMode.SIMPLE
+	_follow_pcam.follow_damping = true
+	_follow_pcam.follow_damping_value = Vector2(0.08, 0.08)
+	_follow_pcam.zoom = Vector2.ONE
+	_follow_pcam.tween_resource = tween_res
+	add_child(_follow_pcam)
+
+	_puzzle_pcam = PhantomCamera2D.new()
+	_puzzle_pcam.name = "PuzzlePCam"
+	_puzzle_pcam.priority = 0
+	_puzzle_pcam.follow_mode = PhantomCamera2D.FollowMode.NONE
+	_puzzle_pcam.zoom = Vector2(1.8, 1.8)
+	_puzzle_pcam.tween_resource = tween_res
+	add_child(_puzzle_pcam)
+
+func _on_save_requested(data: Dictionary) -> void:
+	data.completed_crossroads = completed_crossroads.duplicate()
+	data.current_crossroad_index = current_crossroad_index
+	data.day_night_cycle_time = day_night_cycle_time
+	data.crossroad_enabled = _crossroad_enabled.duplicate()
+
+func _on_load_completed(data: Dictionary) -> void:
+	completed_crossroads = data.get("completed_crossroads", []).duplicate()
+	current_crossroad_index = data.get("current_crossroad_index", 0)
+	day_night_cycle_time = data.get("day_night_cycle_time", 0.0)
+	if data.has("crossroad_enabled"):
+		_crossroad_enabled = data.get("crossroad_enabled", []).duplicate()
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.keycode == KEY_R and event.pressed and not event.echo:
 		if GridTrans.is_available() and not GridTrans.is_busy():
 			_test_spiral()
+	if event is InputEventKey and event.keycode == KEY_T and event.pressed and not event.echo:
+		if GridTrans.is_available() and not GridTrans.is_busy():
+			var game := get_node_or_null("/root/Game")
+			if game and game.has_method("enter_room"):
+				game.enter_room()
 
 func _test_spiral() -> void:
 	await GridTrans.play(3.2)
@@ -465,6 +518,7 @@ func _process(delta: float) -> void:
 		for l in _parallax_layers:
 			var spr = l["sprite"] as Sprite2D
 			spr.position.x = -px * l["factor"] + l["tile_x"]
+	_animate_lights(delta)
 
 func _build_terrain() -> void:
 	var TERRAIN_HALF = 50000
@@ -1042,15 +1096,10 @@ func _on_game_state_changed(new_state: int) -> void:
 			is_waiting_for_response = false
 			hud.get_node("Panel/WarningLabel").visible = false
 			reset_cutscene.visible = false
-			if platformer_instance:
-				_cleanup_platformer()
 		GameManager.GameState.PUZZLE:
 			puzzle_timer.stop()
 		GameManager.GameState.SECOND_PUZZLE:
 			puzzle_timer.stop()
-		GameManager.GameState.PLATFORMER:
-			puzzle_timer.stop()
-			_load_platformer_level()
 		GameManager.GameState.RESET:
 			_trigger_reset()
 
@@ -1060,6 +1109,8 @@ func _spawn_player() -> void:
 	player_instance = player_scene.instantiate()
 	player_instance.position = player_start.position
 	add_child(player_instance)
+	if _follow_pcam:
+		_follow_pcam.follow_target = player_instance
 
 func _on_puzzle_timer_timeout() -> void:
 	if GameManager.state != GameManager.GameState.PLAYING:
@@ -1110,15 +1161,12 @@ func _trigger_betaal_riddle() -> void:
 		var betaal = player_instance.get_node_or_null("Visual/BetaalPosition/Betaal")
 		if betaal and betaal.has_method("start_speaking"):
 			betaal.start_speaking()
-		var cam = player_instance.get_node_or_null("Camera2D")
-		if cam:
+		if _puzzle_pcam:
 			var crossroad_pos = _get_crossroad_position(current_crossroad_index)
-			var player_pos = player_instance.position
-			var cam_offset = Vector2(crossroad_pos.x - player_pos.x, crossroad_pos.y - player_pos.y - 80)
-			var tween = create_tween().set_parallel(true)
-			tween.tween_property(cam, "position", cam_offset, 0.8).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
-			tween.tween_property(cam, "zoom", Vector2(1.8, 1.8), 0.8).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
-			tween.tween_property(cam, "rotation", 0.0, 0.8).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+			_puzzle_pcam.position = crossroad_pos
+			_puzzle_pcam.priority = 10
+		if _follow_pcam:
+			_follow_pcam.follow_target = player_instance
 
 	await get_tree().create_timer(5.0).timeout
 	puzzle_encounter.show_riddle(current_riddle_data, false)
@@ -1137,13 +1185,8 @@ func _on_dialogue_response(response: bool) -> void:
 	_reset_camera_zoom()
 
 func _reset_camera_zoom() -> void:
-	if player_instance:
-		var cam = player_instance.get_node_or_null("Camera2D")
-		if cam:
-			var tween = create_tween().set_parallel(true)
-			tween.tween_property(cam, "position", Vector2.ZERO, 0.4).set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
-			tween.tween_property(cam, "zoom", Vector2(1.0, 1.0), 0.4).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_SINE)
-			tween.tween_property(cam, "rotation", 0.0, 0.4).set_ease(Tween.EASE_IN_OUT).set_trans(Tween.TRANS_SINE)
+	if _puzzle_pcam:
+		_puzzle_pcam.priority = 0
 
 func _on_bonus_awarded(bonus_type: String) -> void:
 	match bonus_type:
@@ -1484,56 +1527,7 @@ func _mark_crossroad_completed() -> void:
 		completed_crossroads.append(current_crossroad_index)
 		current_crossroad_index += 1
 	_generate_crossroad(current_crossroad_index)
-
-func _load_platformer_level() -> void:
-	if not platformer_scene:
-		return
-	if SpiralTransition.is_available():
-		await SpiralTransition.cover(1.0)
-	elif get_tree().root.has_node("Transition"):
-		await Transition.cover("fade", 0.35)
-	if player_instance:
-		player_instance.queue_free()
-		player_instance = null
-	_stop_betaal_speaking()
-	visible = false
-	platformer_instance = platformer_scene.instantiate()
-	var difficulty = GameManager.pending_level_difficulty
-	if platformer_instance.has_method("set_difficulty"):
-		platformer_instance.set_difficulty(difficulty)
-	get_tree().root.add_child(platformer_instance)
-	platformer_instance.platformer_completed.connect(_on_platformer_completed)
-	await get_tree().process_frame
-	if SpiralTransition.is_available():
-		await SpiralTransition.reveal(1.0)
-	elif get_tree().root.has_node("Transition"):
-		await Transition.reveal("fade", 0.35)
-
-func _on_platformer_completed() -> void:
-	var outcome = GameManager.pending_level_difficulty
-	if SpiralTransition.is_available():
-		await SpiralTransition.cover(1.0)
-	elif get_tree().root.has_node("Transition"):
-		await Transition.cover("fade", 0.35)
-	_cleanup_platformer()
-	visible = true
-	_spawn_player()
-	_light_crossroad(outcome)
-	_mark_crossroad_completed()
-	await get_tree().process_frame
-	if SpiralTransition.is_available():
-		await SpiralTransition.reveal(1.0)
-	elif get_tree().root.has_node("Transition"):
-		await Transition.reveal("fade", 0.35)
-	await get_tree().create_timer(2.0).timeout
-	GameManager.on_platformer_completed()
-
-func _cleanup_platformer() -> void:
-	if platformer_instance:
-		if platformer_instance.get_parent():
-			platformer_instance.get_parent().remove_child(platformer_instance)
-		platformer_instance.queue_free()
-		platformer_instance = null
+	GameManager.save_game()
 
 func _update_day_night(delta: float) -> void:
 	if not _moonlight_node:
@@ -1654,6 +1648,49 @@ func _update_day_night(delta: float) -> void:
 	if _ambient_node and _ambient_node.has_method("set_ambient_energy"):
 		_ambient_node.ambient_energy = amb_energy
 
+func _animate_lights(delta: float) -> void:
+	if not _warm_light or not _cool_light:
+		return
+	_light_drift_time += delta
+
+	var cycle_progress = fmod(day_night_cycle_time, CYCLE_TOTAL) / CYCLE_TOTAL
+	var night_factor: float
+	if cycle_progress < SUN_OFFSET:
+		night_factor = 0.0
+	elif cycle_progress < SUNSET_END:
+		night_factor = (cycle_progress - SUN_OFFSET) / (SUNSET_END - SUN_OFFSET)
+	else:
+		night_factor = 1.0
+
+	var t = _light_drift_time
+	var drift_x = sin(t * 0.15) * 80.0 + cos(t * 0.23) * 50.0
+	var drift_y = cos(t * 0.19) * 60.0 + sin(t * 0.27) * 40.0
+	_warm_light.position = Vector2(-200 + drift_x, 200 + drift_y)
+
+	var cool_drift_x = sin(t * 0.21 + 1.7) * 70.0 + cos(t * 0.17) * 60.0
+	var cool_drift_y = cos(t * 0.13 + 0.8) * 50.0 + sin(t * 0.29) * 45.0
+	_cool_light.position = Vector2(200 + cool_drift_x, 50 + cool_drift_y)
+
+	var warm_energy = 0.25 + 0.1 * sin(t * 1.3) + 0.05 * sin(t * 3.7)
+	var cool_energy = 0.18 + 0.08 * sin(t * 0.9 + 2.1) + 0.04 * sin(t * 4.1)
+	var warm_color = Color(
+		1.0 - night_factor * 0.2,
+		0.7 - night_factor * 0.15,
+		0.3 + night_factor * 0.3
+	)
+	var cool_color = Color(
+		0.3 + night_factor * 0.2,
+		0.5 + night_factor * 0.15,
+		1.0 - night_factor * 0.1
+	)
+	_warm_light.energy = warm_energy * (1.0 - night_factor * 0.4)
+	_warm_light.color = warm_color
+	_cool_light.energy = cool_energy * (0.5 + night_factor * 0.8)
+	_cool_light.color = cool_color
+
+	if _firefly_particles and player_instance:
+		_firefly_particles.position = player_instance.position
+
 func _make_lit(item: CanvasItem) -> void:
 	var shader = load("res://addons/lit/shaders/lit_receiver_fast.gdshader")
 	if not shader:
@@ -1691,3 +1728,54 @@ func _setup_lighting() -> void:
 	pp.vignette_strength = 0.4
 	pp.layer = 5
 	add_child(pp)
+
+	if ClassDB.class_exists(&"LitPointLight2D"):
+		_warm_light = LitPointLight2D.new()
+		_warm_light.name = "AmbientWarmLight"
+		_warm_light.energy = 0.3
+		_warm_light.range = 600
+		_warm_light.color = Color(1.0, 0.7, 0.3)
+		_warm_light.position = Vector2(-200, 200)
+		_warm_light.shadow_enabled = false
+		add_child(_warm_light)
+
+		_cool_light = LitPointLight2D.new()
+		_cool_light.name = "AmbientCoolLight"
+		_cool_light.energy = 0.2
+		_cool_light.range = 500
+		_cool_light.color = Color(0.3, 0.5, 1.0)
+		_cool_light.position = Vector2(200, 50)
+		_cool_light.shadow_enabled = false
+		add_child(_cool_light)
+
+	_setup_fireflies()
+
+func _setup_fireflies() -> void:
+	_firefly_particles = GPUParticles2D.new()
+	_firefly_particles.name = "FireflyParticles"
+	_firefly_particles.amount = 15
+	_firefly_particles.lifetime = 6.0
+	_firefly_particles.explosiveness = 0.0
+	_firefly_particles.randomness = 0.6
+	_firefly_particles.one_shot = false
+	_firefly_particles.preprocess = 3.0
+	_firefly_particles.visibility_rect = Rect2(-800, -400, 1600, 1200)
+	_firefly_particles.z_index = 2
+
+	var mat := ParticleProcessMaterial.new()
+	mat.direction = Vector3(0.0, -1.0, 0.0)
+	mat.spread = 180.0
+	mat.gravity = Vector3(0.0, -0.5, 0.0)
+	mat.initial_velocity_min = 4.0
+	mat.initial_velocity_max = 12.0
+	mat.linear_accel_min = -2.0
+	mat.linear_accel_max = 2.0
+	mat.angular_velocity_min = -30.0
+	mat.angular_velocity_max = 30.0
+	mat.scale_min = 0.08
+	mat.scale_max = 0.25
+	mat.color = Color(1.0, 0.95, 0.6, 0.8)
+	mat.hue_variation_min = -0.05
+	mat.hue_variation_max = 0.05
+	_firefly_particles.process_material = mat
+	add_child(_firefly_particles)
