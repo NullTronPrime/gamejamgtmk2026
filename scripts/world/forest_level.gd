@@ -329,6 +329,12 @@ const LEVEL_WIDTH = 8000
 const DEPTH_NEAR = 600
 const DEPTH_FAR = 0
 
+const ROAD_ANGLE_FAR := 0
+const ROAD_ANGLE_NEAR := 180
+
+func _road_center_x(t: float) -> float:
+	return lerp(float(ROAD_ANGLE_FAR), float(ROAD_ANGLE_NEAR), t)
+
 var player_scene: PackedScene
 var player_instance: CharacterBody2D
 var hud: CanvasLayer
@@ -377,6 +383,7 @@ var _skybox_height: float = 720.0
 const CYCLE_TOTAL: float = 60.0
 const SUN_OFFSET: float = 0.42
 const SUNSET_END: float = 0.58
+const GridTrans := preload("res://scripts/ui/grid_transition.gd")
 
 func _ready() -> void:
 	environment = EnvironmentTracker.new()
@@ -413,7 +420,21 @@ func _ready() -> void:
 	_load_crossroad_config()
 	_build_skybox()
 	_setup_crossroads()
+	if get_tree().root.has_node("Transition"):
+		Transition.add_style("spiral", {"shader": "spiral_wipe.gdshader", "flip": false})
+	var st := SpiralTransition.new()
+	get_tree().root.add_child(st)
+	var gt := GridTrans.new()
+	get_tree().root.add_child(gt)
 	GameManager.start_run()
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.keycode == KEY_R and event.pressed and not event.echo:
+		if GridTrans.is_available() and not GridTrans.is_busy():
+			_test_spiral()
+
+func _test_spiral() -> void:
+	await GridTrans.play(3.2)
 
 var _game_time: float = 0.0
 
@@ -443,9 +464,7 @@ func _process(delta: float) -> void:
 		var px = player_instance.position.x
 		for l in _parallax_layers:
 			var spr = l["sprite"] as Sprite2D
-			var scroll = fmod(-px * l["factor"], l["tex_w"])
-			if scroll > 0: scroll -= l["tex_w"]
-			spr.position.x = scroll + l["tile_x"]
+			spr.position.x = -px * l["factor"] + l["tile_x"]
 
 func _build_terrain() -> void:
 	var TERRAIN_HALF = 50000
@@ -464,8 +483,9 @@ func _build_terrain() -> void:
 		var t = float(i) / 40.0
 		var y = DEPTH_FAR + t * (DEPTH_NEAR - DEPTH_FAR)
 		var path_w = lerp(200.0, 800.0, t)
+		var cx = _road_center_x(t)
 		var stripe = ColorRect.new()
-		stripe.offset_left = -path_w / 2
+		stripe.offset_left = cx - path_w / 2
 		stripe.offset_top = y - 1
 		stripe.size = Vector2(path_w, 2)
 		var c = 0.18 if i % 2 == 0 else 0.14
@@ -484,8 +504,18 @@ func _build_skybox() -> void:
 	var ws = DisplayServer.window_get_size()
 	_skybox_width = max(ws.x, 1280)
 	_skybox_height = max(ws.y, 720)
+
+	var clear_layer := CanvasLayer.new()
+	clear_layer.layer = -12
+	add_child(clear_layer)
+	var clear_rect := ColorRect.new()
+	clear_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	clear_rect.color = Color(0.35, 0.55, 0.8)
+	clear_layer.add_child(clear_rect)
+
 	_skybox_layer = CanvasLayer.new()
 	_skybox_layer.layer = -8
+	_skybox_layer.offset = Vector2(0, 1)
 	add_child(_skybox_layer)
 
 	var sky_rect := ColorRect.new()
@@ -566,7 +596,7 @@ func _add_parallax_backdrop() -> void:
 	]
 	_parallax_layers.clear()
 	var vs = DisplayServer.window_get_size()
-	var count = 10
+	var count = 20
 	for l in layers:
 		var tex = load("res://assets/sprites/background/" + l["tex"])
 		if not tex:
@@ -585,9 +615,9 @@ func _add_parallax_backdrop() -> void:
 			spr.texture = tex_to_use
 			spr.centered = false
 			spr.scale = Vector2.ONE * l["scale"]
-			spr.position = Vector2((i - 3) * sw, base_y)
+			spr.position = Vector2((i - 10) * sw, base_y)
 			pl.add_child(spr)
-			_parallax_layers.append({ "sprite": spr, "factor": l["factor"], "tex_w": sw, "tile_x": (i - 3) * sw })
+			_parallax_layers.append({ "sprite": spr, "factor": l["factor"], "tex_w": sw, "tile_x": (i - 10) * sw })
 
 func _generate_forest() -> void:
 	var props = Node2D.new()
@@ -610,9 +640,9 @@ func _generate_chunk(ci: int) -> void:
 
 	var giant_chance = rng.randf()
 	if giant_chance < 0.10:
-		var gx = cx + rng.randf_range(-120, 120)
-		var gy = DEPTH_FAR + rng.randf_range(0.25, 0.75) * (DEPTH_NEAR - DEPTH_FAR)
-		var gt = (gy - DEPTH_FAR) / max(1.0, DEPTH_NEAR - DEPTH_FAR)
+		var gt = rng.randf_range(0.25, 0.75)
+		var gx = cx + _road_center_x(gt) + rng.randf_range(-120, 120)
+		var gy = DEPTH_FAR + gt * (DEPTH_NEAR - DEPTH_FAR)
 		_chunk_idx_counter += 1
 		var giant_w = rng.randf_range(100, 150)
 		var giant_h = rng.randf_range(550, 800)
@@ -628,7 +658,7 @@ func _generate_chunk(ci: int) -> void:
 		var path_w = lerp(200.0, 800.0, t)
 		var side = 1.0 if rng.randi() % 2 == 0 else -1.0
 		var dist = path_w / 2 + rng.randf_range(30, 180)
-		var tx = cx + side * dist
+		var tx = cx + _road_center_x(t) + side * dist
 		var th = rng.randf_range(150, 450)
 		var tw = rng.randf_range(35, 90)
 		var variant = rng.randi() % 5
@@ -656,7 +686,7 @@ func _generate_chunk(ci: int) -> void:
 		var by = DEPTH_FAR + t * (DEPTH_NEAR - DEPTH_FAR)
 		var bw = rng.randf_range(25, 45)
 		var bh = rng.randf_range(18, 35)
-		var bx = cx + rng.randf_range(-300, 300)
+		var bx = cx + _road_center_x(t) + rng.randf_range(-300, 300)
 		_chunk_idx_counter += 1
 		var bush_name = "Bush_%d" % _chunk_idx_counter
 		_build_rect_prop(props, bush_name, bx, by, Color(0.1, 0.3, 0.08), bw, bh)
@@ -668,7 +698,7 @@ func _generate_chunk(ci: int) -> void:
 		var t = rng.randf_range(0.1, 0.9)
 		var ry = DEPTH_FAR + t * (DEPTH_NEAR - DEPTH_FAR)
 		var rs = rng.randf_range(12, 30)
-		var rx = cx + rng.randf_range(-350, 350)
+		var rx = cx + _road_center_x(t) + rng.randf_range(-350, 350)
 		_chunk_idx_counter += 1
 		var rock_name = "Rock_%d" % _chunk_idx_counter
 		_build_rect_prop(props, rock_name, rx, ry, Color(0.25, 0.22, 0.18), rs, rs * 0.5)
@@ -681,7 +711,7 @@ func _generate_chunk(ci: int) -> void:
 		var sy = DEPTH_FAR + t * (DEPTH_NEAR - DEPTH_FAR)
 		var sw = rng.randf_range(12, 22)
 		var sh = rng.randf_range(10, 18)
-		var sx = cx + rng.randf_range(-250, 250)
+		var sx = cx + _road_center_x(t) + rng.randf_range(-250, 250)
 		_chunk_idx_counter += 1
 		var shrub_name = "Shrub_%d" % _chunk_idx_counter
 		_build_rect_prop(props, shrub_name, sx, sy, Color(0.08, 0.22, 0.06), sw, sh)
@@ -1311,12 +1341,13 @@ func _generate_crossroad(idx: int) -> void:
 		var t = float(i) / float(stripe_count - 1)
 		var y = t * road_max_y
 		var path_w = lerp(200.0, 800.0, t)
+		var rcx = cx + _road_center_x(t)
 
 		if y >= cy:
 			var stripe = ColorRect.new()
 			stripe.size = Vector2(path_w, 2)
 			stripe.color = dark_col
-			stripe.position = Vector2(cx - path_w / 2, y - 1)
+			stripe.position = Vector2(rcx - path_w / 2, y - 1)
 			marker.add_child(stripe)
 		else:
 			var depth_t = 1.0 - y / max(cy, 1.0)
@@ -1326,18 +1357,19 @@ func _generate_crossroad(idx: int) -> void:
 			var left = ColorRect.new()
 			left.size = Vector2(arm_w, 2)
 			left.color = dark_fork
-			left.position = Vector2(cx - arm_w - spread, y - 1)
+			left.position = Vector2(rcx - arm_w - spread, y - 1)
 			marker.add_child(left)
 
 			var right = ColorRect.new()
 			right.size = Vector2(arm_w, 2)
 			right.color = dark_fork
-			right.position = Vector2(cx + spread, y - 1)
+			right.position = Vector2(rcx + spread, y - 1)
 			marker.add_child(right)
 
+	var t_cy = cy / road_max_y
 	var trigger = Area2D.new()
 	trigger.name = "CenterDot"
-	trigger.position = Vector2(cx, cy)
+	trigger.position = Vector2(cx + _road_center_x(t_cy), cy)
 
 	var dot_visual = ColorRect.new()
 	dot_visual.name = "DotVisual"
@@ -1456,7 +1488,9 @@ func _mark_crossroad_completed() -> void:
 func _load_platformer_level() -> void:
 	if not platformer_scene:
 		return
-	if get_tree().root.has_node("Transition"):
+	if SpiralTransition.is_available():
+		await SpiralTransition.cover(1.0)
+	elif get_tree().root.has_node("Transition"):
 		await Transition.cover("fade", 0.35)
 	if player_instance:
 		player_instance.queue_free()
@@ -1469,19 +1503,27 @@ func _load_platformer_level() -> void:
 		platformer_instance.set_difficulty(difficulty)
 	get_tree().root.add_child(platformer_instance)
 	platformer_instance.platformer_completed.connect(_on_platformer_completed)
-	if get_tree().root.has_node("Transition"):
+	await get_tree().process_frame
+	if SpiralTransition.is_available():
+		await SpiralTransition.reveal(1.0)
+	elif get_tree().root.has_node("Transition"):
 		await Transition.reveal("fade", 0.35)
 
 func _on_platformer_completed() -> void:
 	var outcome = GameManager.pending_level_difficulty
-	if get_tree().root.has_node("Transition"):
+	if SpiralTransition.is_available():
+		await SpiralTransition.cover(1.0)
+	elif get_tree().root.has_node("Transition"):
 		await Transition.cover("fade", 0.35)
 	_cleanup_platformer()
 	visible = true
 	_spawn_player()
 	_light_crossroad(outcome)
 	_mark_crossroad_completed()
-	if get_tree().root.has_node("Transition"):
+	await get_tree().process_frame
+	if SpiralTransition.is_available():
+		await SpiralTransition.reveal(1.0)
+	elif get_tree().root.has_node("Transition"):
 		await Transition.reveal("fade", 0.35)
 	await get_tree().create_timer(2.0).timeout
 	GameManager.on_platformer_completed()

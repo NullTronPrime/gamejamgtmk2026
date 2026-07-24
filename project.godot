@@ -37,6 +37,10 @@ window/size/viewport_height=720
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 
+[editor]
+
+movie_writer/movie_file="C:/Users/ragav/Documents/GAMEJAM/vikram-and-betaal-gmae/recordings/movie.avi"
+
 [editor_plugins]
 
 enabled=PackedStringArray("res://addons/PlantGenerator/plugin.cfg", "res://addons/controller_icons/plugin.cfg", "res://addons/lit/plugin.cfg", "res://addons/saltmire_save_lite/plugin.cfg", "res://addons/saltmire_transitions/plugin.cfg")
@@ -96,13 +100,15 @@ pause={
 
 3d/physics_engine="Jolt Physics"
 
+[plugins]
+
+res://addons/lit/lit_plugin.gd={
+"enable": true
+}
+
 [rendering]
 
 rendering_device/driver.windows="d3d12"
-
-[plugins]
-
-"res://addons/lit/lit_plugin.gd"={"enable":true}
 
 [shader_globals]
 

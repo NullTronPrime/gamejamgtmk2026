@@ -67,6 +67,7 @@ theme_override_colors/font_color = Color(1, 1, 0.5, 1)
 text = "Type: -"
 
 [node name="BenefitsPanel" type="Panel" parent="."]
+visible = false
 offset_left = -210.0
 offset_top = 10.0
 offset_right = -10.0
