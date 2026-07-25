@@ -132,11 +132,9 @@ const SE_BIT := 128
 ## corner, and diagonal join pieces to the right.  The old code treated the sheet
 ## as 32×32 cells, which cut across those 16×16 logical pieces and made the
 ## generated level connect incorrectly.
-const THREE_DEEP_DIRT_PATTERN := [
-	[Vector2i(8, 0), Vector2i(9, 0), Vector2i(10, 0), Vector2i(11, 0)],
-	[Vector2i(8, 1), Vector2i(9, 1), Vector2i(10, 1), Vector2i(11, 1)],
-	[Vector2i(8, 2), Vector2i(9, 2), Vector2i(10, 2), Vector2i(11, 2)],
-	[Vector2i(8, 3), Vector2i(9, 3), Vector2i(10, 3), Vector2i(10, 3)],
+const GRASS_CAP_PATTERN := [
+	[Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(3, 0)],
+	[Vector2i(0, 1), Vector2i(1, 1), Vector2i(2, 1), Vector2i(3, 1)],
 ]
 const FLOOR_DIRT_TILE := Vector2i(2, 2)
 const CAVE_FILL_TILE := Vector2i(2, 6)
@@ -180,16 +178,15 @@ func _has(mask: int, bit: int) -> bool:
 ## Pick one 16×16 foreground autotile. The mask is computed at the same
 ## 16 px resolution as the atlas, so internal subtiles connect to each other
 ## and side/diagonal pieces only appear on the true perimeter.
-func _floor_overlay_subtile(mask: int, sx: int, sy: int) -> Vector2i:
-	var north := _has(mask, N_BIT)
+func _floor_overlay_subtile(exposed_cell: bool, sx: int, sy: int) -> Vector2i:
 
-	# The megablock contains transparent pixels by design. It must be drawn as an
-	# overlay over opaque dirt, otherwise those pixels become holes through to the
-	# sky/background. Only the exposed surface gets the overlay; buried cells are
-	# just continuous dirt.
-	if north:
+	# The grass cap tiles contain transparent pixels by design. They must be drawn
+	# over opaque dirt, otherwise the surface gets holes/gaps. Only the top two
+	# source rows use the lush grass cap; deeper source rows stay dirt so the
+	# generated ground remains continuous instead of repeating sparse grass clumps.
+	if not exposed_cell or sy >= GRASS_CAP_PATTERN.size():
 		return Vector2i(-1, -1)
-	return THREE_DEEP_DIRT_PATTERN[sy][sx]
+	return GRASS_CAP_PATTERN[sy][sx]
 
 func _cave_subtile(_mask: int, _sx: int, _sy: int) -> Vector2i:
 	# Generated cave geometry also needs to be continuous; avoid every cave
@@ -227,6 +224,7 @@ func _add_tiles() -> void:
 			body.add_child(shape)
 			add_child(body)
 
+			var exposed_floor := t == TileType.FLOOR and not _tile_is(x, y - 1, TileType.FLOOR)
 			for sy in CELL_SUBTILES:
 				for sx in CELL_SUBTILES:
 					var mx := x * CELL_SUBTILES + sx
@@ -235,7 +233,7 @@ func _add_tiles() -> void:
 					var pos := Vector2(x * TILE_SIZE + sx * ATLAS_TILE_SIZE + ATLAS_TILE_SIZE * 0.5, y * TILE_SIZE + sy * ATLAS_TILE_SIZE + ATLAS_TILE_SIZE * 0.5)
 					if t == TileType.FLOOR:
 						_paint_subtile(tex, FLOOR_DIRT_TILE, pos)
-						var overlay := _floor_overlay_subtile(mask, sx, sy)
+						var overlay := _floor_overlay_subtile(exposed_floor, sx, sy)
 						if overlay.x >= 0:
 							_paint_subtile(tex, overlay, pos)
 					else:
