@@ -138,7 +138,7 @@ const THREE_DEEP_DIRT_PATTERN := [
 	[Vector2i(8, 2), Vector2i(9, 2), Vector2i(10, 2), Vector2i(11, 2)],
 	[Vector2i(8, 3), Vector2i(9, 3), Vector2i(10, 3), Vector2i(10, 3)],
 ]
-const FLOOR_DIRT_TILE := Vector2i(8, 2)
+const FLOOR_DIRT_TILE := Vector2i(2, 2)
 const CAVE_FILL_TILE := Vector2i(2, 6)
 
 func _tile_is(x: int, y: int, t: TileType) -> bool:
@@ -180,15 +180,15 @@ func _has(mask: int, bit: int) -> bool:
 ## Pick one 16×16 foreground autotile. The mask is computed at the same
 ## 16 px resolution as the atlas, so internal subtiles connect to each other
 ## and side/diagonal pieces only appear on the true perimeter.
-func _floor_subtile(mask: int, sx: int, sy: int) -> Vector2i:
+func _floor_overlay_subtile(mask: int, sx: int, sy: int) -> Vector2i:
 	var north := _has(mask, N_BIT)
 
-	# Use the atlas' three-deep dirt megablock for the actual exposed surface.
-	# Repeating one arbitrary tile leaves a dark seam below the grass; this block
-	# contains the intended grass-to-dirt transition rows. Buried cells use a
-	# seamless dirt fill so stacked terrain remains continuous.
+	# The megablock contains transparent pixels by design. It must be drawn as an
+	# overlay over opaque dirt, otherwise those pixels become holes through to the
+	# sky/background. Only the exposed surface gets the overlay; buried cells are
+	# just continuous dirt.
 	if north:
-		return FLOOR_DIRT_TILE
+		return Vector2i(-1, -1)
 	return THREE_DEEP_DIRT_PATTERN[sy][sx]
 
 func _cave_subtile(_mask: int, _sx: int, _sy: int) -> Vector2i:
@@ -232,8 +232,14 @@ func _add_tiles() -> void:
 					var mx := x * CELL_SUBTILES + sx
 					var my := y * CELL_SUBTILES + sy
 					var mask := _micro_neighbor_mask(mx, my, t)
-					var atlas := _floor_subtile(mask, sx, sy) if t == TileType.FLOOR else _cave_subtile(mask, sx, sy)
-					_paint_subtile(tex, atlas, Vector2(x * TILE_SIZE + sx * ATLAS_TILE_SIZE + ATLAS_TILE_SIZE * 0.5, y * TILE_SIZE + sy * ATLAS_TILE_SIZE + ATLAS_TILE_SIZE * 0.5))
+					var pos := Vector2(x * TILE_SIZE + sx * ATLAS_TILE_SIZE + ATLAS_TILE_SIZE * 0.5, y * TILE_SIZE + sy * ATLAS_TILE_SIZE + ATLAS_TILE_SIZE * 0.5)
+					if t == TileType.FLOOR:
+						_paint_subtile(tex, FLOOR_DIRT_TILE, pos)
+						var overlay := _floor_overlay_subtile(mask, sx, sy)
+						if overlay.x >= 0:
+							_paint_subtile(tex, overlay, pos)
+					else:
+						_paint_subtile(tex, _cave_subtile(mask, sx, sy), pos)
 
 func _add_ladder() -> void:
 	var lx := _rng.randi_range(5, ROOM_W - 6)

@@ -11,14 +11,14 @@ The visible platform floor should not be built by repeating a single grass tile 
 - middle dirt
 - lower dirt
 
-For generated rooms, use the three-deep megablock at `(8..11, 0..3)` for the exposed surface cell. This removes the black gap under the grass and matches the tileset example that shows three blocks of dirt depth.
+For generated rooms, draw a fully opaque dirt backing first, then overlay the three-deep megablock at `(8..11, 0..3)` for the exposed surface cell. This removes the black gap under the grass, prevents transparent pixels from becoming holes, and matches the tileset example that shows three blocks of dirt depth.
 
 ## Continuous generated fill tiles
 
 | Generated use | Atlas tile(s) | Reason |
 | --- | --- | --- |
 | Exposed 3-deep floor surface | `(8..11, 0..3)` | Uses the intended megablock rows instead of a fake repeated grass strip. |
-| Buried dirt/interior fill | `(8, 2)` | Continuous dirt for floor cells that have dirt directly above. |
+| Opaque dirt backing/interior fill | `(2, 2)` | Fully opaque dirt drawn under floor art so transparent megablock pixels reveal dirt instead of background. |
 | Cave wall/platform fill | `(2, 6)` | Continuous cave fill sample; avoids transparent connector holes. |
 
 ## Room generation rule
@@ -33,8 +33,9 @@ The generated bottom ground is three gameplay cells deep so the surface has enou
 
 Each 64×64 gameplay cell is drawn as a 4×4 set of 16×16 samples.
 
-- If a floor subtile has no floor directly above it, it uses the matching coordinate from `(8..11, 0..3)`.
-- If a floor subtile has floor directly above it, it uses buried dirt `(8, 2)` so stacked terrain remains continuous.
+- Every floor subtile first draws opaque dirt backing `(2, 2)`.
+- If a floor subtile has no floor directly above it, it then overlays the matching coordinate from `(8..11, 0..3)`. Transparent pixels in that overlay reveal the dirt backing, not the background.
+- If a floor subtile has floor directly above it, it receives no overlay and remains solid dirt `(2, 2)`.
 - Walls and platforms use cave fill `(2, 6)` for procedural geometry.
 
 ## Reserved tiles
