@@ -19,7 +19,7 @@ Atlas coordinates in this document are `(x, y)` 16 px tile coordinates, starting
 
 ## Neighbor mask
 
-Each generated 64×64 collision cell renders as a 4×4 set of 16×16 atlas tiles. Choose tiles from the eight neighboring cells:
+Each generated 64×64 collision cell renders as a 4×4 set of 16×16 atlas tiles. The autotile mask is computed for every 16×16 subtile in that expanded micro-grid, not once per 64×64 gameplay cell. This is the key rule: internal subtiles connect to their adjacent subtiles, while only the true outside perimeter receives side caps, exposed undersides, and diagonal sockets. Choose each 16×16 atlas tile from the eight neighboring micro-grid positions:
 
 | Bit | Neighbor |
 | --- | --- |
@@ -56,4 +56,4 @@ The cave/background layer follows the same eight-neighbor logic as foreground di
 
 ## Implementation note
 
-`DungeonLevel` applies these rules in code using `_neighbor_mask()`, `_floor_subtile()`, and `_cave_subtile()`. Keep the atlas at 16 px granularity; do not reintroduce 32 px sampling for this sheet.
+`DungeonLevel` applies these rules in code using `_micro_neighbor_mask()`, `_floor_subtile()`, and `_cave_subtile()`. Keep both mask computation and atlas sampling at 16 px granularity; do not compute one mask for an entire 64×64 cell and do not reintroduce 32 px sampling for this sheet.

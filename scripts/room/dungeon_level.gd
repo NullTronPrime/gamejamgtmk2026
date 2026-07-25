@@ -148,23 +148,30 @@ func _tile_is(x: int, y: int, t: TileType) -> bool:
 		return false
 	return _grid[x][y] == t
 
-func _neighbor_mask(x: int, y: int, t: TileType) -> int:
+func _micro_tile_is(mx: int, my: int, t: TileType) -> bool:
+	if mx < 0 or my < 0:
+		return false
+	var cell_x := int(mx / CELL_SUBTILES)
+	var cell_y := int(my / CELL_SUBTILES)
+	return _tile_is(cell_x, cell_y, t)
+
+func _micro_neighbor_mask(mx: int, my: int, t: TileType) -> int:
 	var mask := 0
-	if _tile_is(x, y - 1, t):
+	if _micro_tile_is(mx, my - 1, t):
 		mask |= N_BIT
-	if _tile_is(x, y + 1, t):
+	if _micro_tile_is(mx, my + 1, t):
 		mask |= S_BIT
-	if _tile_is(x - 1, y, t):
+	if _micro_tile_is(mx - 1, my, t):
 		mask |= W_BIT
-	if _tile_is(x + 1, y, t):
+	if _micro_tile_is(mx + 1, my, t):
 		mask |= E_BIT
-	if _tile_is(x - 1, y - 1, t):
+	if _micro_tile_is(mx - 1, my - 1, t):
 		mask |= NW_BIT
-	if _tile_is(x + 1, y - 1, t):
+	if _micro_tile_is(mx + 1, my - 1, t):
 		mask |= NE_BIT
-	if _tile_is(x - 1, y + 1, t):
+	if _micro_tile_is(mx - 1, my + 1, t):
 		mask |= SW_BIT
-	if _tile_is(x + 1, y + 1, t):
+	if _micro_tile_is(mx + 1, my + 1, t):
 		mask |= SE_BIT
 	return mask
 
@@ -174,9 +181,9 @@ func _has(mask: int, bit: int) -> bool:
 func _pattern_tile(pattern: Array, sx: int, sy: int) -> Vector2i:
 	return pattern[sy][sx]
 
-## Pick a foreground tile by quadrant so cardinal edges and diagonal joins are
-## both represented. Diagonal bits are only allowed to connect when their two
-## supporting cardinal neighbours exist; otherwise the corner stays exposed.
+## Pick one 16×16 foreground autotile. The mask is computed at the same
+## 16 px resolution as the atlas, so internal subtiles connect to each other
+## and side/diagonal pieces only appear on the true perimeter.
 func _floor_subtile(mask: int, sx: int, sy: int) -> Vector2i:
 	var north := _has(mask, N_BIT)
 	var south := _has(mask, S_BIT)
@@ -275,9 +282,11 @@ func _add_tiles() -> void:
 			body.add_child(shape)
 			add_child(body)
 
-			var mask := _neighbor_mask(x, y, t)
 			for sy in CELL_SUBTILES:
 				for sx in CELL_SUBTILES:
+					var mx := x * CELL_SUBTILES + sx
+					var my := y * CELL_SUBTILES + sy
+					var mask := _micro_neighbor_mask(mx, my, t)
 					var atlas := _floor_subtile(mask, sx, sy) if t == TileType.FLOOR else _cave_subtile(mask, sx, sy)
 					_paint_subtile(tex, atlas, Vector2(x * TILE_SIZE + sx * ATLAS_TILE_SIZE + ATLAS_TILE_SIZE * 0.5, y * TILE_SIZE + sy * ATLAS_TILE_SIZE + ATLAS_TILE_SIZE * 0.5))
 
