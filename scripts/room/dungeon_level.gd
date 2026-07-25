@@ -111,69 +111,152 @@ func _carve_room() -> void:
 
 	_player_spawn = Vector2i(2, ROOM_H - 3)
 
-## Tile atlas helpers — each 64×64 cell renders as 2×2 sub-tiles (32×32 each).
+## Jungle tileset helpers — the source art is a 16×16 connecting sheet.
+## Each gameplay cell is 64×64, so it renders as a 4×4 block of source tiles.
+## Atlas coordinates below are 16 px cells in assets/dungeon/fore_jungle_grass.png.
+const ATLAS_TILE_SIZE := 16.0
+const CELL_SUBTILES := 4
+const N_BIT := 1
+const S_BIT := 2
+const W_BIT := 4
+const E_BIT := 8
+const NW_BIT := 16
+const NE_BIT := 32
+const SW_BIT := 64
+const SE_BIT := 128
+
+## The artist laid the foreground as real 4×4 chunks, then supplied loose edge,
+## corner, and diagonal join pieces to the right.  The old code treated the sheet
+## as 32×32 cells, which cut across those 16×16 logical pieces and made the
+## generated level connect incorrectly.
+const SOLID_DIRT_PATTERN := [
+	[Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(3, 0)],
+	[Vector2i(0, 1), Vector2i(1, 1), Vector2i(2, 1), Vector2i(3, 1)],
+	[Vector2i(0, 2), Vector2i(1, 2), Vector2i(2, 2), Vector2i(3, 2)],
+	[Vector2i(0, 3), Vector2i(1, 3), Vector2i(2, 3), Vector2i(3, 3)],
+]
+
+const CAVE_PATTERN := [
+	[Vector2i(4, 4), Vector2i(5, 4), Vector2i(6, 4), Vector2i(7, 4)],
+	[Vector2i(4, 5), Vector2i(5, 5), Vector2i(6, 5), Vector2i(7, 5)],
+	[Vector2i(4, 6), Vector2i(5, 6), Vector2i(6, 6), Vector2i(7, 6)],
+	[Vector2i(4, 7), Vector2i(5, 7), Vector2i(6, 7), Vector2i(7, 7)],
+]
+
 func _tile_is(x: int, y: int, t: TileType) -> bool:
 	if x < 0 or x >= ROOM_W or y < 0 or y >= ROOM_H:
 		return false
 	return _grid[x][y] == t
 
-## Compute the cell-level bitmask (checking 64×64 grid neighbours).
-func _cell_bitmask(x: int, y: int, t: TileType) -> int:
-	var n := 1 if _tile_is(x, y - 1, t) else 0
-	var s := 1 if _tile_is(x, y + 1, t) else 0
-	var w := 1 if _tile_is(x - 1, y, t) else 0
-	var e := 1 if _tile_is(x + 1, y, t) else 0
-	return n + s * 2 + w * 4 + e * 8
+func _neighbor_mask(x: int, y: int, t: TileType) -> int:
+	var mask := 0
+	if _tile_is(x, y - 1, t):
+		mask |= N_BIT
+	if _tile_is(x, y + 1, t):
+		mask |= S_BIT
+	if _tile_is(x - 1, y, t):
+		mask |= W_BIT
+	if _tile_is(x + 1, y, t):
+		mask |= E_BIT
+	if _tile_is(x - 1, y - 1, t):
+		mask |= NW_BIT
+	if _tile_is(x + 1, y - 1, t):
+		mask |= NE_BIT
+	if _tile_is(x - 1, y + 1, t):
+		mask |= SW_BIT
+	if _tile_is(x + 1, y + 1, t):
+		mask |= SE_BIT
+	return mask
 
-## Return the atlas tile for sub-cell (dx,dy) within a 64×64 FLOOR cell.
-## bm = cell-level bitmask, exposed = true if no FLOOR in cell above.
-func _floor_tile(bm: int, dx: int, dy: int, exposed: bool) -> Vector2i:
-	# Surface grass row (dy=0, no floor above)
-	if dy == 0 and exposed:
-		match bm:
-			2:   return Vector2i(5, 0)  # S only — isolated pillar → dirt overhang
-			6:   return Vector2i(0, 0) if dx == 0 else Vector2i(5, 0)  # S+W — left edge
-			10:  return Vector2i(5, 0) if dx == 0 else Vector2i(1, 0)  # S+E — right edge
-			14:  return Vector2i(0, 0) if dx == 0 else Vector2i(1, 0)  # S+W+E — flat interior
-			_:   return Vector2i(2, 0)  # fallback — standalone flat top
-	# Dirt body row (dy=1, or any dy when underground)
-	var col := 4  # default solid fill
-	match bm:
-		0:   col = 0  # isolated
-		1:   col = 0  # N only
-		2:   col = 5  # S only — exposed below
-		3:   col = 4  # N+S
-		4:   col = 2 if dx == 0 else 5  # W only — exposed right
-		5:   col = 2 if dx == 0 else 0  # N+W
-		6:   col = 1 if dx == 0 else 5  # S+W — exposed right
-		7:   col = 5 if dx == 0 else 0  # N+S+W
-		8:   col = 5 if dx == 0 else 2  # E only — exposed left
-		9:   col = 0 if dx == 0 else 2  # N+E
-		10:  col = 5 if dx == 0 else 1  # S+E — exposed left
-		11:  col = 0 if dx == 0 else 5  # N+S+E
-		12:  col = 4  # W+E — horizontal strip, solid
-		13:  col = 0 if dx == 0 else 1  # N+W+E — Chunk A bottom
-		14:  col = 0 if dx == 0 else 1  # S+W+E — Chunk A bottom
-		15:  col = 4  # all 4 — deep fill
-		_:   col = 4
-	return Vector2i(col, 1)
+func _has(mask: int, bit: int) -> bool:
+	return (mask & bit) != 0
 
-## Cave tile for WALL / PLATFORM — biases toward dense fill so pillars
-## and platforms don't show transparent "hole" tiles.
-func _cave_tile(bm: int, dy: int) -> Vector2i:
-	var c := (bm & 1) + ((bm >> 1) & 1) + ((bm >> 2) & 1) + ((bm >> 3) & 1)
-	var col := 4  # default dense fill
-	if c == 0:
-		col = 2   # isolated — use Chunk-B edge
-	elif c >= 3:
-		col = 4 if c == 3 else 5  # 3→dense, 4→solid variant
-	elif (bm & 3) == 3 or (bm & 12) == 12:
-		col = 3   # straight run → hole-accent variant
-	return Vector2i(col, 2 if dy == 0 else 3)
+func _pattern_tile(pattern: Array, sx: int, sy: int) -> Vector2i:
+	return pattern[sy][sx]
+
+## Pick a foreground tile by quadrant so cardinal edges and diagonal joins are
+## both represented. Diagonal bits are only allowed to connect when their two
+## supporting cardinal neighbours exist; otherwise the corner stays exposed.
+func _floor_subtile(mask: int, sx: int, sy: int) -> Vector2i:
+	var north := _has(mask, N_BIT)
+	var south := _has(mask, S_BIT)
+	var west := _has(mask, W_BIT)
+	var east := _has(mask, E_BIT)
+	var nw := north and west and _has(mask, NW_BIT)
+	var ne := north and east and _has(mask, NE_BIT)
+	var sw := south and west and _has(mask, SW_BIT)
+	var se := south and east and _has(mask, SE_BIT)
+
+	# Fully buried dirt uses the dense interior variants from the middle of the
+	# surface chunk; this avoids painting grass in underground rows.
+	if north and south and west and east and nw and ne and sw and se:
+		return Vector2i(8 + sx, 2 + (sy % 2))
+
+	# Exposed top surface. Columns 0-3 are the canonical 64 px grass cap.
+	if sy == 0 and not north:
+		if sx == 0 and not west:
+			return Vector2i(0, 0)
+		if sx == 3 and not east:
+			return Vector2i(3, 0)
+		return Vector2i(sx, 0)
+	if sy == 1 and not north:
+		if sx == 0 and not west:
+			return Vector2i(0, 1)
+		if sx == 3 and not east:
+			return Vector2i(3, 1)
+		return Vector2i(sx, 1)
+
+	# Diagonal sockets from the right-hand connection block.
+	if sx < 2 and sy < 2 and west and north and not nw:
+		return Vector2i(4 + sx, sy)
+	if sx >= 2 and sy < 2 and east and north and not ne:
+		return Vector2i(6 + (sx - 2), sy)
+	if sx < 2 and sy >= 2 and west and south and not sw:
+		return Vector2i(4 + sx, 2 + (sy - 2))
+	if sx >= 2 and sy >= 2 and east and south and not se:
+		return Vector2i(6 + (sx - 2), 2 + (sy - 2))
+
+	if not west and sx == 0:
+		return Vector2i(4, sy)
+	if not east and sx == 3:
+		return Vector2i(11, sy)
+	if not south and sy == 3:
+		return Vector2i(8 + sx, 3)
+	return _pattern_tile(SOLID_DIRT_PATTERN, sx, max(2, sy))
+
+func _cave_subtile(mask: int, sx: int, sy: int) -> Vector2i:
+	var north := _has(mask, N_BIT)
+	var south := _has(mask, S_BIT)
+	var west := _has(mask, W_BIT)
+	var east := _has(mask, E_BIT)
+	var nw := north and west and _has(mask, NW_BIT)
+	var ne := north and east and _has(mask, NE_BIT)
+	var sw := south and west and _has(mask, SW_BIT)
+	var se := south and east and _has(mask, SE_BIT)
+
+	if sx < 2 and sy < 2 and west and north and not nw:
+		return Vector2i(8 + sx, 4 + sy)
+	if sx >= 2 and sy < 2 and east and north and not ne:
+		return Vector2i(10 + (sx - 2), 4 + sy)
+	if sx < 2 and sy >= 2 and west and south and not sw:
+		return Vector2i(8 + sx, 6 + (sy - 2))
+	if sx >= 2 and sy >= 2 and east and south and not se:
+		return Vector2i(10 + (sx - 2), 6 + (sy - 2))
+	return _pattern_tile(CAVE_PATTERN, sx, sy)
+
+func _paint_subtile(tex: Texture2D, atlas: Vector2i, world_pos: Vector2) -> void:
+	var sp := Sprite2D.new()
+	sp.texture = tex
+	sp.region_enabled = true
+	sp.region_rect = Rect2(atlas.x * ATLAS_TILE_SIZE, atlas.y * ATLAS_TILE_SIZE, ATLAS_TILE_SIZE, ATLAS_TILE_SIZE)
+	sp.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	sp.scale = Vector2.ONE
+	sp.position = world_pos
+	sp.z_index = -1
+	add_child(sp)
 
 func _add_tiles() -> void:
 	var tex := preload("res://assets/dungeon/fore_jungle_grass.png")
-	var ts := 32.0
 	var hs := TILE_SIZE * 0.5
 
 	for x in ROOM_W:
@@ -192,33 +275,11 @@ func _add_tiles() -> void:
 			body.add_child(shape)
 			add_child(body)
 
-			match t:
-				TileType.FLOOR:
-					var bm := _cell_bitmask(x, y, TileType.FLOOR)
-					var exposed := not _tile_is(x, y - 1, TileType.FLOOR)
-					for dy in 2:
-						for dx in 2:
-							var r := _floor_tile(bm, dx, dy, exposed)
-							var sp := Sprite2D.new()
-							sp.texture = tex
-							sp.region_enabled = true
-							sp.region_rect = Rect2(r.x * ts, r.y * ts, ts, ts)
-							sp.texture_filter = 0
-							sp.position = Vector2(x * TILE_SIZE + dx * ts + ts * 0.5, y * TILE_SIZE + dy * ts + ts * 0.5)
-							sp.z_index = -1
-							add_child(sp)
-				TileType.WALL, TileType.PLATFORM:
-					var bm := _cell_bitmask(x, y, t)
-					for dy in 2:
-						var r := _cave_tile(bm, dy)
-						var sp := Sprite2D.new()
-						sp.texture = tex
-						sp.region_enabled = true
-						sp.region_rect = Rect2(r.x * ts, r.y * ts, ts, ts)
-						sp.texture_filter = 0
-						sp.position = Vector2(x * TILE_SIZE + hs, y * TILE_SIZE + dy * ts + ts * 0.5)
-						sp.z_index = -1
-						add_child(sp)
+			var mask := _neighbor_mask(x, y, t)
+			for sy in CELL_SUBTILES:
+				for sx in CELL_SUBTILES:
+					var atlas := _floor_subtile(mask, sx, sy) if t == TileType.FLOOR else _cave_subtile(mask, sx, sy)
+					_paint_subtile(tex, atlas, Vector2(x * TILE_SIZE + sx * ATLAS_TILE_SIZE + ATLAS_TILE_SIZE * 0.5, y * TILE_SIZE + sy * ATLAS_TILE_SIZE + ATLAS_TILE_SIZE * 0.5))
 
 func _add_ladder() -> void:
 	var lx := _rng.randi_range(5, ROOM_W - 6)
