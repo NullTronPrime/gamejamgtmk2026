@@ -137,10 +137,10 @@ const SOLID_DIRT_PATTERN := [
 ]
 
 const CAVE_PATTERN := [
-	[Vector2i(4, 4), Vector2i(5, 4), Vector2i(6, 4), Vector2i(7, 4)],
-	[Vector2i(4, 5), Vector2i(5, 5), Vector2i(6, 5), Vector2i(7, 5)],
-	[Vector2i(4, 6), Vector2i(5, 6), Vector2i(6, 6), Vector2i(7, 6)],
-	[Vector2i(4, 7), Vector2i(5, 7), Vector2i(6, 7), Vector2i(7, 7)],
+	[Vector2i(8, 4), Vector2i(9, 4), Vector2i(10, 4), Vector2i(10, 4)],
+	[Vector2i(8, 5), Vector2i(9, 5), Vector2i(10, 5), Vector2i(10, 5)],
+	[Vector2i(8, 6), Vector2i(9, 6), Vector2i(10, 6), Vector2i(10, 6)],
+	[Vector2i(8, 6), Vector2i(9, 6), Vector2i(10, 6), Vector2i(10, 6)],
 ]
 
 func _tile_is(x: int, y: int, t: TileType) -> bool:
@@ -186,69 +186,19 @@ func _pattern_tile(pattern: Array, sx: int, sy: int) -> Vector2i:
 ## and side/diagonal pieces only appear on the true perimeter.
 func _floor_subtile(mask: int, sx: int, sy: int) -> Vector2i:
 	var north := _has(mask, N_BIT)
-	var south := _has(mask, S_BIT)
-	var west := _has(mask, W_BIT)
-	var east := _has(mask, E_BIT)
-	var nw := north and west and _has(mask, NW_BIT)
-	var ne := north and east and _has(mask, NE_BIT)
-	var sw := south and west and _has(mask, SW_BIT)
-	var se := south and east and _has(mask, SE_BIT)
 
-	# Fully buried dirt uses the dense interior variants from the middle of the
-	# surface chunk; this avoids painting grass in underground rows.
-	if north and south and west and east and nw and ne and sw and se:
-		return Vector2i(8 + sx, 2 + (sy % 2))
+	# The sheet already contains a coherent 4×4 foreground autotile block at
+	# (0..3, 0..3). Do not use the transparent connector/socket tiles as fill;
+	# those are for hand-authored edges and create holes when repeated inside
+	# generated solid terrain.
+	if north:
+		return Vector2i(sx, 2 + (sy % 2))
+	return _pattern_tile(SOLID_DIRT_PATTERN, sx, sy)
 
-	# Exposed top surface. Columns 0-3 are the canonical 64 px grass cap.
-	if sy == 0 and not north:
-		if sx == 0 and not west:
-			return Vector2i(0, 0)
-		if sx == 3 and not east:
-			return Vector2i(3, 0)
-		return Vector2i(sx, 0)
-	if sy == 1 and not north:
-		if sx == 0 and not west:
-			return Vector2i(0, 1)
-		if sx == 3 and not east:
-			return Vector2i(3, 1)
-		return Vector2i(sx, 1)
-
-	# Diagonal sockets from the right-hand connection block.
-	if sx < 2 and sy < 2 and west and north and not nw:
-		return Vector2i(4 + sx, sy)
-	if sx >= 2 and sy < 2 and east and north and not ne:
-		return Vector2i(6 + (sx - 2), sy)
-	if sx < 2 and sy >= 2 and west and south and not sw:
-		return Vector2i(4 + sx, 2 + (sy - 2))
-	if sx >= 2 and sy >= 2 and east and south and not se:
-		return Vector2i(6 + (sx - 2), 2 + (sy - 2))
-
-	if not west and sx == 0:
-		return Vector2i(4, sy)
-	if not east and sx == 3:
-		return Vector2i(11, sy)
-	if not south and sy == 3:
-		return Vector2i(8 + sx, 3)
-	return _pattern_tile(SOLID_DIRT_PATTERN, sx, max(2, sy))
-
-func _cave_subtile(mask: int, sx: int, sy: int) -> Vector2i:
-	var north := _has(mask, N_BIT)
-	var south := _has(mask, S_BIT)
-	var west := _has(mask, W_BIT)
-	var east := _has(mask, E_BIT)
-	var nw := north and west and _has(mask, NW_BIT)
-	var ne := north and east and _has(mask, NE_BIT)
-	var sw := south and west and _has(mask, SW_BIT)
-	var se := south and east and _has(mask, SE_BIT)
-
-	if sx < 2 and sy < 2 and west and north and not nw:
-		return Vector2i(8 + sx, 4 + sy)
-	if sx >= 2 and sy < 2 and east and north and not ne:
-		return Vector2i(10 + (sx - 2), 4 + sy)
-	if sx < 2 and sy >= 2 and west and south and not sw:
-		return Vector2i(8 + sx, 6 + (sy - 2))
-	if sx >= 2 and sy >= 2 and east and south and not se:
-		return Vector2i(10 + (sx - 2), 6 + (sy - 2))
+func _cave_subtile(_mask: int, sx: int, sy: int) -> Vector2i:
+	# Use only dense cave fill for generated collision walls/platforms. The
+	# surrounding cave connector tiles in the atlas are transparent edge pieces,
+	# not safe interior fill for room geometry.
 	return _pattern_tile(CAVE_PATTERN, sx, sy)
 
 func _paint_subtile(tex: Texture2D, atlas: Vector2i, world_pos: Vector2) -> void:
