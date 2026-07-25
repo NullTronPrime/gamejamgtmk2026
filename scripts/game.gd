@@ -8,6 +8,7 @@ var forest_level: Node2D
 var options_menu: CanvasLayer
 var room_level: Node2D
 var dungeon_level: Node2D
+var cave_level: Node2D
 
 func _ready() -> void:
 	_show_title()
@@ -125,6 +126,29 @@ func exit_dungeon() -> void:
 		return
 	dungeon_level.queue_free()
 	dungeon_level = null
+	if forest_level:
+		forest_level.visible = true
+		forest_level.process_mode = PROCESS_MODE_INHERIT
+	if GridTrans.is_available() and not GridTrans.is_busy():
+		GridTrans.reveal(0.8)
+
+func enter_cave() -> void:
+	if cave_level:
+		return
+	if not GridTrans.is_available() or GridTrans.is_busy():
+		return
+	await GridTrans.cover(0.8)
+	if forest_level:
+		forest_level.visible = false
+		forest_level.process_mode = PROCESS_MODE_DISABLED
+	cave_level = preload("res://scenes/world/cave_level.tscn").instantiate()
+	add_child(cave_level)
+
+func exit_cave() -> void:
+	if not cave_level:
+		return
+	cave_level.queue_free()
+	cave_level = null
 	if forest_level:
 		forest_level.visible = true
 		forest_level.process_mode = PROCESS_MODE_INHERIT

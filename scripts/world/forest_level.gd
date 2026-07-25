@@ -446,6 +446,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			var game := get_node_or_null("/root/Game")
 			if game and game.has_method("enter_dungeon"):
 				game.enter_dungeon()
+	if event is InputEventKey and event.keycode == KEY_C and event.pressed and not event.echo:
+		if GridTrans.is_available() and not GridTrans.is_busy():
+			var game := get_node_or_null("/root/Game")
+			if game and game.has_method("enter_cave"):
+				game.enter_cave()
 
 func _test_spiral() -> void:
 	await GridTrans.play(3.2)
