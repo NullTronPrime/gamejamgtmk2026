@@ -290,40 +290,6 @@ class RockDraw extends Node2D:
 		])
 		draw_colored_polygon(h_points, highlight)
 
-class CircleDraw extends Node2D:
-	var radius: float
-	var fill_color: Color
-	func _draw():
-		draw_circle(Vector2.ZERO, radius, fill_color)
-
-class SunCircle extends Node2D:
-	var radius: float
-	func _draw():
-		draw_circle(Vector2.ZERO, radius, Color(1.0, 0.75, 0.15, 1.0))
-		draw_circle(Vector2.ZERO, radius * 0.6, Color(1.0, 0.95, 0.5, 1.0))
-
-class StarField extends Node2D:
-	var stars: Array[Dictionary] = []
-
-	func _ready():
-		var rng = RandomNumberGenerator.new()
-		rng.seed = 42
-		for i in 60:
-			stars.append({
-				"x": rng.randf_range(-800, 800),
-				"y": rng.randf_range(-500, 100),
-				"r": rng.randf_range(0.8, 2.5),
-				"a": rng.randf_range(0.15, 0.8),
-				"phase": rng.randf_range(0.0, TAU),
-				"twinkle_speed": rng.randf_range(0.5, 3.0)
-			})
-
-	func _draw():
-		var time = Time.get_ticks_msec() / 1000.0
-		for s in stars:
-			var twinkle = 0.6 + 0.4 * sin(time * s.twinkle_speed + s.phase)
-			var alpha = s.a * twinkle
-			draw_circle(Vector2(s.x, s.y), s.r, Color(1, 1, 1, alpha))
 
 const LEVEL_WIDTH = 8000
 const DEPTH_NEAR = 600
@@ -379,11 +345,6 @@ var _puzzle_pcam: PhantomCamera2D
 @onready var player_start: Marker2D = $PlayerStart
 
 var _skybox_layer: CanvasLayer
-var _sky_material: ShaderMaterial
-var _star_node: Node2D
-var _sun_node: Node2D
-var _moon_node: Node2D
-var _moon_disc: Node2D
 var _skybox_width: float = 1280.0
 var _skybox_height: float = 720.0
 const CYCLE_TOTAL: float = 60.0
@@ -559,82 +520,18 @@ func _build_skybox() -> void:
 	_skybox_width = max(ws.x, 1280)
 	_skybox_height = max(ws.y, 720)
 
-	var clear_layer := CanvasLayer.new()
-	clear_layer.layer = -12
-	add_child(clear_layer)
-	var clear_rect := ColorRect.new()
-	clear_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	clear_rect.color = Color(0.35, 0.55, 0.8)
-	clear_layer.add_child(clear_rect)
-
 	_skybox_layer = CanvasLayer.new()
 	_skybox_layer.layer = -8
 	_skybox_layer.offset = Vector2(0, 1)
 	add_child(_skybox_layer)
 
-	var sky_rect := ColorRect.new()
-	sky_rect.name = "SkyRect"
+	var sky_tex := preload("res://assets/forest/sky_bg.png")
+	var sky_rect := TextureRect.new()
+	sky_rect.texture = sky_tex
 	sky_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	sky_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_sky_material = ShaderMaterial.new()
-	_sky_material.shader = preload("res://shaders/sky.gdshader")
-	sky_rect.material = _sky_material
 	_skybox_layer.add_child(sky_rect)
 
-	_star_node = StarField.new()
-	_star_node.name = "Stars"
-	_star_node.modulate = Color(1, 1, 1, 0.0)
-	_skybox_layer.add_child(_star_node)
-
-	_sun_node = Node2D.new()
-	_sun_node.name = "SunNode"
-	_sun_node.modulate = Color(1, 1, 1, 0)
-
-	var sun_glow := CircleDraw.new()
-	sun_glow.name = "SunGlow"
-	sun_glow.radius = 180
-	sun_glow.fill_color = Color(1.0, 0.4, 0.0, 0.2)
-	_sun_node.add_child(sun_glow)
-
-	var sun_halo := CircleDraw.new()
-	sun_halo.name = "SunHalo"
-	sun_halo.radius = 100
-	sun_halo.fill_color = Color(1.0, 0.6, 0.05, 0.4)
-	_sun_node.add_child(sun_halo)
-
-	var sun_disc := SunCircle.new()
-	sun_disc.name = "SunDisc"
-	sun_disc.radius = 65
-	_sun_node.add_child(sun_disc)
-
-	_skybox_layer.add_child(_sun_node)
-
-	_moon_node = Node2D.new()
-	_moon_node.name = "MoonNode"
-	_moon_node.modulate = Color(1, 1, 1, 0)
-
-	var moon_glow := CircleDraw.new()
-	moon_glow.name = "MoonGlow"
-	moon_glow.radius = 160
-	moon_glow.fill_color = Color(0.5, 0.6, 0.9, 0.12)
-	_moon_node.add_child(moon_glow)
-
-	var moon_halo := CircleDraw.new()
-	moon_halo.name = "MoonHalo"
-	moon_halo.radius = 90
-	moon_halo.fill_color = Color(0.7, 0.8, 1.0, 0.25)
-	_moon_node.add_child(moon_halo)
-
-	_moon_disc = CircleDraw.new()
-	_moon_disc.name = "MoonDisc"
-	_moon_disc.radius = 55
-	_moon_disc.fill_color = Color(0.92, 0.92, 0.96, 0.95)
-	_moon_node.add_child(_moon_disc)
-
-	_skybox_layer.add_child(_moon_node)
-
-	for c in [_star_node, _sun_node, _moon_node]:
-		c.queue_redraw()
 	_add_parallax_backdrop()
 
 func _add_parallax_backdrop() -> void:
@@ -1547,72 +1444,6 @@ func _update_day_night(delta: float) -> void:
 	else:
 		night_factor = 1.0
 		sunset_glow = 0.0
-
-	if _sky_material:
-		_sky_material.set_shader_parameter("night_factor", night_factor)
-		_sky_material.set_shader_parameter("sunset_glow", sunset_glow)
-
-	var star_alpha = clamp((night_factor - 0.3) / 0.3, 0.0, 1.0) if night_factor > 0.3 else 0.0
-	if _star_node:
-		_star_node.modulate = Color(1, 1, 1, star_alpha)
-		_star_node.queue_redraw()
-
-	var cam_y = player_instance.position.y if player_instance else _skybox_height * 0.3
-	var cam = player_instance.get_node_or_null("Camera2D") if player_instance else null
-	if cam:
-		cam_y = player_instance.position.y + cam.offset.y
-	var view_half = _skybox_height * 0.5
-	var terrain_top_screen = 0.0 - cam_y + view_half
-	var sky_top = clamp(terrain_top_screen * 0.12, 8.0, _skybox_height * 0.4)
-	var sky_horizon = clamp(terrain_top_screen - 20.0, sky_top + 30.0, _skybox_height * 0.5)
-
-	var hw = _skybox_width * 0.5
-	var mid_x = hw
-
-	var sun_alpha: float
-	var sun_x: float
-	var sun_y: float
-	if cycle_progress < SUNSET_END + 0.06:
-		var sun_t = cycle_progress / (SUNSET_END + 0.06)
-		sun_t = clamp(sun_t, 0.0, 1.0)
-		sun_alpha = 1.0
-		if sun_t > 0.9:
-			sun_alpha = 1.0 - (sun_t - 0.9) / 0.1
-		var sun_arc_angle = sun_t * PI - PI * 0.5
-		sun_x = mid_x + sin(sun_arc_angle) * hw * 0.55
-		sun_y = sky_horizon - (cos(sun_arc_angle) * 0.5 + 0.5) * (sky_horizon - sky_top) * 0.9
-	else:
-		sun_alpha = 0.0
-		sun_x = _skybox_width + 200
-		sun_y = sky_horizon
-	if _sun_node:
-		_sun_node.position = Vector2(sun_x, sun_y)
-		_sun_node.modulate = Color(1, 1, 1, sun_alpha)
-
-	var moon_alpha: float
-	var moon_x: float
-	var moon_y: float
-	if cycle_progress > SUN_OFFSET - 0.05:
-		var moon_start = SUN_OFFSET - 0.05
-		var moon_duration = 1.0 - moon_start
-		var moon_t = clamp((cycle_progress - moon_start) / moon_duration, 0.0, 1.0)
-		moon_alpha = 0.0
-		if moon_t < 0.15:
-			moon_alpha = moon_t / 0.15
-		elif moon_t > 0.85:
-			moon_alpha = 1.0 - (moon_t - 0.85) / 0.15
-		else:
-			moon_alpha = 1.0
-		var moon_arc = moon_t * PI - PI * 0.5
-		moon_x = mid_x + sin(moon_arc) * hw * 0.55
-		moon_y = sky_top + 20.0 + (1.0 - cos(moon_arc)) * 0.5 * (sky_horizon - sky_top) * 0.7
-	else:
-		moon_alpha = 0.0
-		moon_x = -200
-		moon_y = sky_top
-	if _moon_node:
-		_moon_node.position = Vector2(moon_x, moon_y)
-		_moon_node.modulate = Color(1, 1, 1, moon_alpha)
 
 	var light_angle: float
 	var light_color: Color

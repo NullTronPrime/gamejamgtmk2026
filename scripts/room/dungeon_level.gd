@@ -15,7 +15,6 @@ const BLOCK_LAYER := 2
 const WALL_LAYER := 1
 
 enum TileType { EMPTY, WALL, FLOOR, PLATFORM, LADDER }
-enum RoomTheme { CAVE, RUIN, LAB }
 
 var _player: CharacterBody2D
 var _can_move := false
@@ -26,11 +25,10 @@ var _blocks: Array[RigidBody2D] = []
 var _pickups: Array[DungeonPickup] = []
 var _inventory: DungeonInventory
 var _sky: CanvasLayer
-var _current_theme: RoomTheme
 var _on_ladder := false
 var _climbing := false
 var _exiting := false
-var _forest_sky_layer: CanvasLayer
+var _forest_layers: Array[CanvasLayer] = []
 
 func _ready() -> void:
 	_hide_forest_sky()
@@ -47,15 +45,15 @@ func _hide_forest_sky() -> void:
 	var forest := get_node_or_null("/root/Game/ForestLevel")
 	if forest:
 		for child in forest.get_children():
-			if child is CanvasLayer and child.layer == -8:
-				_forest_sky_layer = child
-				_forest_sky_layer.visible = false
-				return
+			if child is CanvasLayer:
+				_forest_layers.append(child)
+				child.visible = false
 
 func _restore_forest_sky() -> void:
-	if _forest_sky_layer:
-		_forest_sky_layer.visible = true
-		_forest_sky_layer = null
+	for l in _forest_layers:
+		if is_instance_valid(l):
+			l.visible = true
+	_forest_layers.clear()
 
 func _build_skybox() -> void:
 	_sky = CanvasLayer.new()
@@ -72,8 +70,6 @@ func _build_skybox() -> void:
 	_sky.add_child(bg)
 
 func _generate_room() -> void:
-	_current_theme = RoomTheme.values()[_rng.randi_range(0, RoomTheme.values().size() - 1)]
-
 	_grid = []
 	for x in ROOM_W:
 		_grid.append([])
@@ -115,13 +111,93 @@ func _carve_room() -> void:
 
 	_player_spawn = Vector2i(2, ROOM_H - 3)
 
+## Blob autotile — each 32×32 sub-tile checks its own 4 neighbours
+## in a virtual grid where each 64×64 cell is 2×2 sub-tiles.
+func _vx(x: int, dx: int) -> int:
+	return x * 2 + dx
+
+func _vy(y: int, dy: int) -> int:
+	return y * 2 + dy
+
+func _vtile(vx: int, vy: int, t: TileType) -> bool:
+	var gx := vx / 2
+	var gy := vy / 2
+	if gx < 0 or gx >= ROOM_W or gy < 0 or gy >= ROOM_H:
+		return false
+	return _grid[gx][gy] == t
+
+func _vbitmask(vx: int, vy: int, t: TileType) -> int:
+	var n := 1 if _vtile(vx, vy - 1, t) else 0
+	var s := 1 if _vtile(vx, vy + 1, t) else 0
+	var w := 1 if _vtile(vx - 1, vy, t) else 0
+	var e := 1 if _vtile(vx + 1, vy, t) else 0
+	return n + s * 2 + w * 4 + e * 8
+
+## Row-0 tile (grass surface) for a given bitmask.
+## vparity = (vx + vy) & 1 for tiling alternation.
+func _grass_top(bm: int, vparity: int) -> Vector2i:
+	match bm:
+		0:  return Vector2i(0, 0)
+		1:  return Vector2i(2, 0)
+		2:  return Vector2i(5, 0)
+		3:  return Vector2i(4, 0)
+		4:  return Vector2i(0, 0)
+		5:  return Vector2i(0, 0)
+		6:  return Vector2i(0, 0)
+		7:  return Vector2i(0, 0)
+		8:  return Vector2i(1, 0)
+		9:  return Vector2i(1, 0)
+		10: return Vector2i(1, 0)
+		11: return Vector2i(1, 0)
+		12: return Vector2i(vparity, 0)
+		13: return Vector2i(vparity, 0)
+		14: return Vector2i(vparity, 0)
+		15: return Vector2i(4, 0)
+		_:  return Vector2i(0, 0)
+
+## Row-1 tile (dirt body) for a given bitmask.
+## vparity = (vx + vy) & 1 for tiling alternation.
+func _dirt_body(bm: int, vparity: int) -> Vector2i:
+	match bm:
+		0:  return Vector2i(0, 1)
+		1:  return Vector2i(0, 1)
+		2:  return Vector2i(5, 1)
+		3:  return Vector2i(4, 1)
+		4:  return Vector2i(2, 1)
+		5:  return Vector2i(2, 1)
+		6:  return Vector2i(5, 1)
+		7:  return Vector2i(5, 1)
+		8:  return Vector2i(5, 1)
+		9:  return Vector2i(5, 1)
+		10: return Vector2i(5, 1)
+		11: return Vector2i(6, 1)
+		12: return Vector2i(4, 1)
+		13: return Vector2i(vparity, 1)
+		14: return Vector2i(vparity, 1)
+		15: return Vector2i(4, 1)
+		_:   return Vector2i(4, 1)
+
+## Background cave tile column for wall/platform bitmask.
+func _bg_column(bitmask: int) -> int:
+	var n := bitmask & 1
+	var s := (bitmask >> 1) & 1
+	var w := (bitmask >> 2) & 1
+	var e := (bitmask >> 3) & 1
+	var c := n + s + w + e
+	if c == 0:
+		return 0
+	if c == 4:
+		return 5
+	if c == 3:
+		return 4
+	if (n and s) or (w and e):
+		return 2
+	return 3
+
 func _add_tiles() -> void:
-	var colors := {
-		RoomTheme.CAVE: { "wall": Color(0.3, 0.28, 0.25), "floor": Color(0.35, 0.3, 0.25), "plat": Color(0.32, 0.27, 0.22) },
-		RoomTheme.RUIN: { "wall": Color(0.4, 0.35, 0.3), "floor": Color(0.5, 0.45, 0.35), "plat": Color(0.45, 0.4, 0.3) },
-		RoomTheme.LAB: { "wall": Color(0.25, 0.3, 0.35), "floor": Color(0.35, 0.4, 0.45), "plat": Color(0.3, 0.35, 0.4) }
-	}
-	var pal: Dictionary = colors[_current_theme]
+	var tex := preload("res://assets/dungeon/fore_jungle_grass.png")
+	var ts := 32.0
+	var hs := TILE_SIZE * 0.5
 
 	for x in ROOM_W:
 		for y in ROOM_H:
@@ -129,46 +205,49 @@ func _add_tiles() -> void:
 			if t == TileType.EMPTY or t == TileType.LADDER:
 				continue
 
-			var rect := ColorRect.new()
-			rect.size = Vector2(TILE_SIZE, TILE_SIZE)
-			rect.position = Vector2(x * TILE_SIZE, y * TILE_SIZE)
-			rect.z_index = -1
+			var body := StaticBody2D.new()
+			body.collision_layer = WALL_LAYER
+			body.position = Vector2(x * TILE_SIZE + hs, y * TILE_SIZE + hs)
+			var shape := CollisionShape2D.new()
+			var box := RectangleShape2D.new()
+			box.size = Vector2(TILE_SIZE, TILE_SIZE)
+			shape.shape = box
+			body.add_child(shape)
+			add_child(body)
+
+			var vx0 := _vx(x, 0)
+			var vy0 := _vy(y, 0)
 
 			match t:
-				TileType.WALL:
-					rect.color = pal["wall"]
-					var body := StaticBody2D.new()
-					body.collision_layer = WALL_LAYER
-					body.position = rect.position + rect.size * 0.5
-					var shape := CollisionShape2D.new()
-					var box := RectangleShape2D.new()
-					box.size = Vector2(TILE_SIZE, TILE_SIZE)
-					shape.shape = box
-					body.add_child(shape)
-					add_child(body)
 				TileType.FLOOR:
-					rect.color = pal["floor"]
-					var body := StaticBody2D.new()
-					body.collision_layer = WALL_LAYER
-					body.position = rect.position + rect.size * 0.5
-					var shape := CollisionShape2D.new()
-					var box := RectangleShape2D.new()
-					box.size = Vector2(TILE_SIZE, TILE_SIZE)
-					shape.shape = box
-					body.add_child(shape)
-					add_child(body)
-				TileType.PLATFORM:
-					rect.color = pal["plat"]
-					var body := StaticBody2D.new()
-					body.collision_layer = WALL_LAYER
-					body.position = rect.position + rect.size * 0.5
-					var shape := CollisionShape2D.new()
-					var box := RectangleShape2D.new()
-					box.size = Vector2(TILE_SIZE, TILE_SIZE)
-					shape.shape = box
-					body.add_child(shape)
-					add_child(body)
-			add_child(rect)
+					for dy in 2:
+						for dx in 2:
+							var vx := vx0 + dx
+							var vy := vy0 + dy
+							var bm := _vbitmask(vx, vy, TileType.FLOOR)
+							var vp := (vx + vy) & 1
+							var r := _grass_top(bm, vp) if dy == 0 else _dirt_body(bm, vp)
+							var sp := Sprite2D.new()
+							sp.texture = tex
+							sp.region_enabled = true
+							sp.region_rect = Rect2(r.x * ts, r.y * ts, ts, ts)
+							sp.texture_filter = 0
+							sp.position = Vector2(x * TILE_SIZE + dx * ts + ts * 0.5, y * TILE_SIZE + dy * ts + ts * 0.5)
+							sp.z_index = -1
+							add_child(sp)
+				TileType.WALL, TileType.PLATFORM:
+					for dy in 2:
+						var vy := vy0 + dy
+						var bm := _vbitmask(vx0, vy, t)
+						var col := _bg_column(bm)
+						var sp := Sprite2D.new()
+						sp.texture = tex
+						sp.region_enabled = true
+						sp.region_rect = Rect2(col * ts, (2 + dy) * ts, ts, ts)
+						sp.texture_filter = 0
+						sp.position = Vector2(x * TILE_SIZE + hs, y * TILE_SIZE + dy * ts + ts * 0.5)
+						sp.z_index = -1
+						add_child(sp)
 
 func _add_ladder() -> void:
 	var lx := _rng.randi_range(5, ROOM_W - 6)
