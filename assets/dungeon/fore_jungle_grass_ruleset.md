@@ -9,17 +9,18 @@ The foreground sheet is not a single repeated fill. It has a lush grass cap, dir
 For generated floors:
 
 1. Draw opaque dirt backing `(2, 2)` under every 16×16 floor subtile.
-2. On the top exposed gameplay cell only, overlay the lush grass cap block `(0..3, 0..1)`.
-3. Do not overlay sparse grass-clump/decorative rows through the body of the ground.
-4. Keep buried/stacked floor cells as pure opaque dirt backing.
+2. On the top exposed gameplay cell only, overlay the lush grass cap block `(0..3, 0..1)` as a three-slice strip: column `0` is the left end, columns `1..2` are the repeating middle, and column `3` is the right end.
+3. Do not repeat the whole cap block per gameplay cell; that repeats end caps through the middle of a continuous platform.
+4. Do not overlay sparse grass-clump/decorative rows through the body of the ground.
+5. Keep buried/stacked floor cells as pure opaque dirt backing.
 
-This keeps the floor continuous while using the proper grass art from the tileset instead of the sparse clump row.
+This keeps the floor continuous while using the proper grass art from the tileset instead of the sparse clump row or repeated cap ends.
 
 ## Continuous generated fill tiles
 
 | Generated use | Atlas tile(s) | Reason |
 | --- | --- | --- |
-| Exposed lush grass cap overlay | `(0..3, 0..1)` | Proper continuous grass surface from the sheet. |
+| Exposed lush grass cap overlay | `(0..3, 0..1)` | Three-slice grass surface: left end, repeating middle, right end. |
 | Opaque dirt backing/interior fill | `(2, 2)` | Fully opaque dirt drawn under floor art so transparent pixels reveal dirt instead of background. |
 | Cave wall/platform fill | `(2, 6)` | Continuous cave fill sample; avoids transparent connector holes. |
 
@@ -37,6 +38,7 @@ Each 64×64 gameplay cell is drawn as a 4×4 set of 16×16 samples.
 
 - Every floor subtile first draws opaque dirt backing `(2, 2)`.
 - If the whole floor cell is exposed on top, source rows `0..1` overlay the lush grass cap `(0..3, 0..1)`.
+- For the cap overlay, west/east micro-neighbors choose the slice: no west uses column `0`, no east uses column `3`, otherwise columns `1..2` repeat as the middle.
 - Source rows `2..3` and all buried cells remain solid dirt `(2, 2)`.
 - Walls and platforms use cave fill `(2, 6)` for procedural geometry.
 

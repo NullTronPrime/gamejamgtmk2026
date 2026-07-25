@@ -178,15 +178,18 @@ func _has(mask: int, bit: int) -> bool:
 ## Pick one 16×16 foreground autotile. The mask is computed at the same
 ## 16 px resolution as the atlas, so internal subtiles connect to each other
 ## and side/diagonal pieces only appear on the true perimeter.
-func _floor_overlay_subtile(exposed_cell: bool, sx: int, sy: int) -> Vector2i:
-
-	# The grass cap tiles contain transparent pixels by design. They must be drawn
-	# over opaque dirt, otherwise the surface gets holes/gaps. Only the top two
-	# source rows use the lush grass cap; deeper source rows stay dirt so the
-	# generated ground remains continuous instead of repeating sparse grass clumps.
+func _floor_overlay_subtile(exposed_cell: bool, mask: int, mx: int, sy: int) -> Vector2i:
+	# The grass cap is a three-slice strip: column 0 is the left end, columns 1-2
+	# are tileable middle, and column 3 is the right end. Do not repeat the whole
+	# cap block per gameplay cell, or the ends appear every 64 px.
 	if not exposed_cell or sy >= GRASS_CAP_PATTERN.size():
 		return Vector2i(-1, -1)
-	return GRASS_CAP_PATTERN[sy][sx]
+	if not _has(mask, W_BIT):
+		return GRASS_CAP_PATTERN[sy][0]
+	if not _has(mask, E_BIT):
+		return GRASS_CAP_PATTERN[sy][3]
+	var middle_col := 1 + (mx % 2)
+	return GRASS_CAP_PATTERN[sy][middle_col]
 
 func _cave_subtile(_mask: int, _sx: int, _sy: int) -> Vector2i:
 	# Generated cave geometry also needs to be continuous; avoid every cave
@@ -233,7 +236,7 @@ func _add_tiles() -> void:
 					var pos := Vector2(x * TILE_SIZE + sx * ATLAS_TILE_SIZE + ATLAS_TILE_SIZE * 0.5, y * TILE_SIZE + sy * ATLAS_TILE_SIZE + ATLAS_TILE_SIZE * 0.5)
 					if t == TileType.FLOOR:
 						_paint_subtile(tex, FLOOR_DIRT_TILE, pos)
-						var overlay := _floor_overlay_subtile(exposed_floor, sx, sy)
+						var overlay := _floor_overlay_subtile(exposed_floor, mask, mx, sy)
 						if overlay.x >= 0:
 							_paint_subtile(tex, overlay, pos)
 					else:
