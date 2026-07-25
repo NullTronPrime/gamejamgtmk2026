@@ -483,8 +483,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.keycode == KEY_T and event.pressed and not event.echo:
 		if GridTrans.is_available() and not GridTrans.is_busy():
 			var game := get_node_or_null("/root/Game")
-			if game and game.has_method("enter_room"):
-				game.enter_room()
+			if game and game.has_method("enter_dungeon"):
+				game.enter_dungeon()
 
 func _test_spiral() -> void:
 	await GridTrans.play(3.2)

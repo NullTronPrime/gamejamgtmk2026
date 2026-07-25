@@ -1,7 +1,9 @@
 extends Node2D
 
-const DEPTH_STEP := 72.0
-const DEPTH_SCALE_FACTOR := 0.65
+const CELL_W := 565.0
+const CELL_H := 441.0
+const DEPTH_STEP := 60.0
+const DEPTH_SCALE_FACTOR := 0.55
 const CORRIDOR_LENGTH := 5
 const SIDE_OFFSET := 160.0
 
@@ -100,6 +102,9 @@ func _rebuild_depth_corridor() -> void:
 		if cell_data.get("wall", false):
 			break
 
+		var scale_t := pow(DEPTH_SCALE_FACTOR, i + 1)
+		var pos := fwd * ((i + 1) * DEPTH_STEP + DEPTH_STEP * 0.5)
+
 		var cell := RoomCell.new()
 		cell.build()
 		cell.configure(
@@ -108,10 +113,8 @@ func _rebuild_depth_corridor() -> void:
 			i == CORRIDOR_LENGTH - 1,
 			""
 		)
-
-		var scale_t := pow(DEPTH_SCALE_FACTOR, i + 1)
 		cell.scale = Vector2(scale_t, scale_t)
-		cell.position = fwd * ((i + 1) * DEPTH_STEP + DEPTH_STEP * 0.5)
+		cell.position = pos
 
 		add_child(cell)
 		_depth_cells.append(cell)

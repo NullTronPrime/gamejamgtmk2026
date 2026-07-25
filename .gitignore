@@ -12,7 +12,7 @@ recordings/
 
 # Junk / test files
 example/
-animated_human_skeleton_2d.*
-human_skeleton_2d.tscn
+#animated_human_skeleton_2d.*
+#human_skeleton_2d.tscn
 LICENSE
 LICENSE.txt

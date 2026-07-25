@@ -44,7 +44,7 @@ static func build(parent: Node2D, body_color: Color, skin_color: Color) -> Dicti
 		polygons.append(upper)
 
 		var elbow := Node2D.new()
-		elbow.name = "Elbow"
+		elbow.name = ("L" if side < 0 else "R") + "Elbow"
 		elbow.position = Vector2(0, 16)
 		shoulder.add_child(elbow)
 
@@ -78,7 +78,7 @@ static func build(parent: Node2D, body_color: Color, skin_color: Color) -> Dicti
 		polygons.append(thigh)
 
 		var knee := Node2D.new()
-		knee.name = "Knee"
+		knee.name = ("L" if side < 0 else "R") + "Knee"
 		knee.position = Vector2(0, 18)
 		hip.add_child(knee)
 

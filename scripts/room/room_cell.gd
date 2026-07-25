@@ -26,6 +26,8 @@ func set_texture_override(overrides: Dictionary) -> void:
 func build() -> void:
 	var t := _texture_override
 
+	_add_bg_frame()
+
 	back_wall = Sprite2D.new()
 	back_wall.name = "Back"
 	back_wall.texture = t.get("r1", TEXTURES.r1)
@@ -54,6 +56,36 @@ func build() -> void:
 	right_wall.name = "RightWall"
 	right_wall.texture = t.get("r5", TEXTURES.r5)
 	add_child(right_wall)
+
+
+func _add_bg_frame() -> void:
+	var c := Color(0.05, 0.04, 0.06)
+	var hw := 565.0 * 0.5
+	var hh := 441.0 * 0.5
+
+	var left := ColorRect.new()
+	left.color = c
+	left.size = Vector2(152.0, 441.0)
+	left.position = Vector2(-hw, -hh)
+	add_child(left)
+
+	var right := ColorRect.new()
+	right.color = c
+	right.size = Vector2(131.0, 441.0)
+	right.position = Vector2(435.0 - hw, -hh)
+	add_child(right)
+
+	var top := ColorRect.new()
+	top.color = c
+	top.size = Vector2(283.0, 227.0)
+	top.position = Vector2(152.0 - hw, -hh)
+	add_child(top)
+
+	var bottom := ColorRect.new()
+	bottom.color = c
+	bottom.size = Vector2(283.0, 121.0)
+	bottom.position = Vector2(152.0 - hw, 320.0 - hh)
+	add_child(bottom)
 
 
 func configure(open_left: bool, open_right: bool, is_dead_end: bool, inward_scene_path: String = "") -> void:
