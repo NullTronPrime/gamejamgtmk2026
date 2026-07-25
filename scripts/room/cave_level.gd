@@ -10,7 +10,7 @@ const GRAVITY := 1400.0
 const JUMP_VEL := -480.0
 const MOVE_SPEED := 180.0
 const CLIMB_SPEED := 120.0
-const PUSH_FORCE := 200.0
+const PUSH_FORCE := 300.0
 const BLOCK_LAYER := 2
 const WALL_LAYER := 1
 
@@ -22,11 +22,23 @@ var _grid: Array[Array]
 var _rng: RandomNumberGenerator
 var _player_spawn: Vector2i
 var _blocks: Array[RigidBody2D] = []
-var _inventory: DungeonInventory
 var _on_ladder := false
 var _climbing := false
 var _exiting := false
 var _forest_layers: Array[CanvasLayer] = []
+
+var _is_pushing := false
+var _jump_launch_time := -1.0
+var _land_time := -1.0
+var _was_on_floor := true
+
+var _held_item: RigidBody2D
+var _held_joint: PinJoint2D
+var _shadow: Polygon2D
+var _is_punching := false
+var _punch_start := -1.0
+var _punch_dir := Vector2.RIGHT
+var _last_facing := 1.0
 
 var _pressure_plate: Area2D
 var _pressure_activated := false
@@ -48,7 +60,7 @@ func _ready() -> void:
 	_generate_room()
 	_spawn_player()
 	_setup_camera()
-	_inventory = $InventoryUI
+	GameInventory.selected_changed.connect(_on_selected_changed)
 	reveal.call_deferred()
 
 func _hide_forest_sky() -> void:
@@ -276,21 +288,21 @@ func _add_blocks() -> void:
 	if _grid[px][py] != TileType.PLATFORM:
 		return
 
-	var mass := 6.0
+	var mass := 2.0
 	var b := RigidBody2D.new()
 	b.name = "PushBlock_0"
 	b.gravity_scale = 1.0
-	b.lock_rotation = true
+	b.lock_rotation = false
 	b.mass = mass
-	b.linear_damp = 0.5
-	b.angular_damp = 3.0
+	b.linear_damp = 0.1
+	b.angular_damp = 0.3
 	b.continuous_cd = RigidBody2D.CCD_MODE_CAST_SHAPE
 	b.collision_layer = BLOCK_LAYER
 	b.collision_mask = WALL_LAYER | BLOCK_LAYER
 
 	var mat := PhysicsMaterial.new()
-	mat.friction = 0.9
-	mat.bounce = 0.0
+	mat.friction = 0.1
+	mat.bounce = 0.05
 	b.physics_material_override = mat
 
 	var body_shape := CollisionShape2D.new()
@@ -471,8 +483,8 @@ func _add_exit_door() -> void:
 	add_child(exit_label)
 
 func _open_exit() -> void:
-	_exit_door.monitoring = true
-	_exit_door.monitorable = true
+	_exit_door.set_deferred("monitoring", true)
+	_exit_door.set_deferred("monitorable", true)
 
 	var tween := create_tween()
 	tween.set_parallel(true)
@@ -517,6 +529,10 @@ func _spawn_player() -> void:
 
 	_player.position = Vector2(_player_spawn.x * TILE_SIZE, _player_spawn.y * TILE_SIZE)
 	add_child(_player)
+	_shadow = _create_player_shadow()
+	_player.add_child(_shadow)
+	if not GameInventory.selected_item.is_empty():
+		_update_held_item()
 
 func _setup_camera() -> void:
 	var cam := Camera2D.new()
@@ -532,19 +548,26 @@ func reveal() -> void:
 		await GridTrans.reveal(0.8)
 	_can_move = true
 
-func _unhandled_input(event: InputEvent) -> void:
+func _input(event: InputEvent) -> void:
 	if event is InputEventKey:
-		if event.keycode == KEY_T and event.pressed and not event.echo and not _exiting:
+		if event.keycode == KEY_T and event.pressed and not event.echo and not _exiting and _door_open:
 			_exit_cave()
 		if event.keycode == KEY_I and event.pressed and not event.echo:
-			if _inventory:
-				_inventory.toggle()
+			var inv = get_node_or_null("/root/Game/InventoryLayer/InventoryUI")
+			if inv and inv.has_method("toggle"):
+				inv.toggle()
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		_do_punch()
 
 func _physics_process(delta: float) -> void:
 	if not _can_move or not _player:
 		return
 
 	var dir := Input.get_axis(&"move_left", &"move_right")
+	if dir != 0:
+		_last_facing = signf(dir)
 	var on_floor := _player.is_on_floor()
 	var vert := Input.get_axis(&"move_up", &"move_down")
 
@@ -565,6 +588,16 @@ func _physics_process(delta: float) -> void:
 	else:
 		var jump := Input.is_action_just_pressed(&"jump") and on_floor
 
+		if jump:
+			_jump_launch_time = Time.get_ticks_msec() / 1000.0
+
+		if _was_on_floor and not on_floor:
+			_jump_launch_time = Time.get_ticks_msec() / 1000.0
+		elif not _was_on_floor and on_floor:
+			_land_time = Time.get_ticks_msec() / 1000.0
+			_jump_launch_time = -1.0
+		_was_on_floor = on_floor
+
 		_player.velocity.x = dir * MOVE_SPEED
 		_player.velocity.y += GRAVITY * delta
 
@@ -582,14 +615,22 @@ func _physics_process(delta: float) -> void:
 	if cam:
 		cam.position = _player.position
 
+	_update_held_item_position()
+	if _is_punching and Time.get_ticks_msec() / 1000.0 - _punch_start > 0.15:
+		_is_punching = false
+
 func _push_rigid_bodies() -> void:
+	_is_pushing = false
 	for i in _player.get_slide_collision_count():
 		var col := _player.get_slide_collision(i)
 		var body := col.get_collider()
 		if body is RigidBody2D:
+			_is_pushing = true
 			var push_dir := col.get_normal() * -1.0
-			var speed_ratio := _player.velocity.length() / MOVE_SPEED
-			body.apply_central_force(push_dir * PUSH_FORCE * speed_ratio)
+			var speed_ratio := clampf(_player.velocity.length() / MOVE_SPEED, 0.2, 1.0)
+			var force_mult: float = 2.0 + body.mass * 0.5
+			body.apply_central_force(push_dir * PUSH_FORCE * speed_ratio * force_mult)
+			body.apply_torque(push_dir.x * 800.0 * speed_ratio)
 
 func _update_rig_animation(dir: float, on_floor: bool, climbing: bool) -> void:
 	var t := Time.get_ticks_msec() / 1000.0 * 2.0
@@ -634,6 +675,76 @@ func _update_rig_animation(dir: float, on_floor: bool, climbing: bool) -> void:
 				c.rotation = 0
 		var torso := _get_rig_part("Torso")
 		if torso: torso.rotation = 0.15 if _player.velocity.y < 0 else -0.1
+		var l_shoulder := _get_rig_part("LShoulder")
+		var r_shoulder := _get_rig_part("RShoulder")
+		if _player.velocity.y < 0:
+			if l_shoulder: l_shoulder.rotation = -0.6
+			if r_shoulder: r_shoulder.rotation = 0.6
+		else:
+			if l_shoulder: l_shoulder.rotation = -0.2
+			if r_shoulder: r_shoulder.rotation = 0.2
+		return
+
+	var now := Time.get_ticks_msec() / 1000.0
+
+	if _land_time > 0.0 and now - _land_time < 0.15:
+		var land_factor: float = (now - _land_time) / 0.15
+		var squat: float = lerp(0.4, 0.0, land_factor)
+		var l_knee := _get_rig_part("LKnee")
+		var r_knee := _get_rig_part("RKnee")
+		if l_knee: l_knee.rotation = squat
+		if r_knee: r_knee.rotation = squat
+		var torso := _get_rig_part("Torso")
+		if torso: torso.rotation = -squat * 0.3
+		var r_hip := _get_rig_part("RHip")
+		var l_hip := _get_rig_part("LHip")
+		if l_hip: l_hip.rotation = -squat * 0.1
+		if r_hip: r_hip.rotation = squat * 0.1
+		return
+
+	if _is_punching:
+		var punch_now: float = Time.get_ticks_msec() / 1000.0
+		var elapsed: float = punch_now - _punch_start
+		if elapsed < 0.15:
+			var p: float = min(elapsed / 0.1, 1.0)
+			var f: float = _last_facing
+			var torso: Node2D = _get_rig_part("Torso")
+			if torso:
+				var forward := Vector2(f, 0)
+				var rel_angle := forward.angle_to(_punch_dir) if _punch_dir.length_squared() > 0 else 0.0
+				torso.rotation = -0.15 * f * p + clamp(rel_angle * 0.2, -0.3, 0.3) * p
+			var closer_s: Node2D
+			var closer_e: Node2D
+			if f > 0:
+				closer_s = _get_rig_part("LShoulder")
+				closer_e = _get_rig_part("LElbow")
+			else:
+				closer_s = _get_rig_part("RShoulder")
+				closer_e = _get_rig_part("RElbow")
+			if closer_s: closer_s.rotation = 0.8 * p * f
+			if closer_e: closer_e.rotation = -0.3 * p
+		return
+
+	if _is_pushing:
+		var facing := signf(dir)
+		var torso := _get_rig_part("Torso")
+		if torso: torso.rotation = -0.2 * facing
+		var l_shoulder := _get_rig_part("LShoulder")
+		var r_shoulder := _get_rig_part("RShoulder")
+		if l_shoulder: l_shoulder.rotation = 0.7 * facing
+		if r_shoulder: r_shoulder.rotation = -0.7 * facing
+		var l_elbow := _get_rig_part("LElbow")
+		var r_elbow := _get_rig_part("RElbow")
+		if l_elbow: l_elbow.rotation = -0.1
+		if r_elbow: r_elbow.rotation = 0.1
+		var l_knee := _get_rig_part("LKnee")
+		var r_knee := _get_rig_part("RKnee")
+		if l_knee: l_knee.rotation = 0.25
+		if r_knee: r_knee.rotation = 0.25
+		var l_hip := _get_rig_part("LHip")
+		var r_hip := _get_rig_part("RHip")
+		if l_hip: l_hip.rotation = 0.1 * facing
+		if r_hip: r_hip.rotation = -0.1 * facing
 		return
 
 	if abs(dir) < 0.1:
@@ -657,6 +768,98 @@ func _update_rig_animation(dir: float, on_floor: bool, climbing: bool) -> void:
 
 	var torso := _get_rig_part("Torso")
 	if torso: torso.rotation = -swing * 0.1
+
+func _on_selected_changed(_item_id: String) -> void:
+	_update_held_item()
+
+func _create_player_shadow() -> Polygon2D:
+	var shadow := Polygon2D.new()
+	shadow.name = "PlayerShadow"
+	var pts := PackedVector2Array()
+	var seg := 20
+	for i in seg:
+		var a := TAU * i / seg
+		pts.append(Vector2(cos(a) * 18.0, sin(a) * 7.0))
+	shadow.polygon = pts
+	shadow.color = Color(0, 0, 0, 0.3)
+	shadow.position = Vector2(0, 55)
+	shadow.z_index = -1
+	return shadow
+
+func _cleanup_held_item() -> void:
+	if _held_joint:
+		_held_joint.queue_free()
+		_held_joint = null
+	if _held_item:
+		_held_item.queue_free()
+		_held_item = null
+
+func _update_held_item() -> void:
+	_cleanup_held_item()
+	if GameInventory.selected_item.is_empty() or not is_instance_valid(_player):
+		return
+	var data: Dictionary = GameInventory.item_data()
+	if not data.has(GameInventory.selected_item):
+		return
+	var icon: Color = data[GameInventory.selected_item]["icon"]
+
+	_held_item = RigidBody2D.new()
+	_held_item.name = "HeldItem"
+	_held_item.mass = 0.5
+	_held_item.gravity_scale = 0.5
+	_held_item.collision_layer = 8
+	_held_item.collision_mask = WALL_LAYER | BLOCK_LAYER
+	var held_shape := CollisionShape2D.new()
+	var held_rect := RectangleShape2D.new()
+	held_rect.size = Vector2(10, 14)
+	held_shape.shape = held_rect
+	_held_item.add_child(held_shape)
+	var held_vis := ColorRect.new()
+	held_vis.size = Vector2(10, 14)
+	held_vis.color = icon
+	held_vis.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_held_item.add_child(held_vis)
+	_held_item.add_collision_exception_with(_player)
+
+	var hands_pos := _player.global_position + Vector2(_last_facing * 16, -8)
+	_held_item.global_position = hands_pos
+	add_child(_held_item)
+
+	_held_joint = PinJoint2D.new()
+	_held_joint.name = "HeldItemJoint"
+	_held_joint.global_position = hands_pos
+	add_child(_held_joint)
+	_held_joint.node_a = _held_item.get_path()
+	_held_joint.node_b = _player.get_path()
+
+func _update_held_item_position() -> void:
+	if not _held_item or not _held_joint or not is_instance_valid(_player):
+		return
+	_held_joint.global_position = _player.global_position + Vector2(_last_facing * 16, -8)
+
+func _do_punch() -> void:
+	if not _can_move or not is_instance_valid(_player):
+		return
+	_is_punching = true
+	_punch_start = Time.get_ticks_msec() / 1000.0
+	_punch_dir = (_player.get_global_mouse_position() - _player.global_position).normalized()
+
+	_player.velocity += -_punch_dir * 150.0
+
+	var space_state := get_world_2d().direct_space_state
+	var query := PhysicsShapeQueryParameters2D.new()
+	var shape := CircleShape2D.new()
+	shape.radius = 30.0
+	query.shape = shape
+	query.transform = Transform2D(0, _player.global_position + _punch_dir * 35.0)
+	query.collision_mask = BLOCK_LAYER
+	query.exclude = [_player]
+
+	for r in space_state.intersect_shape(query):
+		var body: Variant = r.collider
+		if body is RigidBody2D:
+			body.apply_central_force(_punch_dir * 500.0)
+			body.apply_torque(_punch_dir.x * 300.0)
 
 func _get_rig_part(part_name: String) -> Node2D:
 	return _find_node_recursive(_player, part_name)
@@ -684,6 +887,7 @@ func _exit_cave() -> void:
 		return
 	_exiting = true
 	_can_move = false
+	_cleanup_held_item()
 	_restore_forest_sky()
 	if GridTrans.is_available() and not GridTrans.is_busy():
 		await GridTrans.cover(0.8)

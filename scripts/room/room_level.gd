@@ -10,6 +10,7 @@ var _floor_map: TileMap
 var _wall_map: TileMap
 var _player: CharacterBody2D
 var _can_move := false
+var _exiting := false
 
 const _FLOOR_VARIANTS := [
 	Vector2i(6, 2), Vector2i(7, 2), Vector2i(9, 0), Vector2i(10, 0)
@@ -73,11 +74,44 @@ func _generate_room() -> void:
 		for y in ROOM_H:
 			var cell := Vector2i(x, y)
 			var is_wall := x == 0 or x == ROOM_W - 1 or y == 0 or y == ROOM_H - 1
-			if is_wall:
+			var is_door := (x == ROOM_W / 2 and y == 0) or (x == ROOM_W / 2 and y == ROOM_H - 1)
+			if is_wall and not is_door:
 				_wall_map.set_cell(0, cell, 0, _pick_wall_tile(x, y))
-			else:
+			elif not is_wall:
 				_floor_map.set_cell(0, cell, 0, _FLOOR_VARIANTS[rng.randi() % _FLOOR_VARIANTS.size()])
-	# No openings in this version - solid room
+
+	_add_exit_trigger()
+
+func _add_exit_trigger() -> void:
+	var exit_area := Area2D.new()
+	exit_area.name = "ExitArea"
+	var shape := CollisionShape2D.new()
+	var rect := RectangleShape2D.new()
+	rect.size = Vector2(TILE_SIZE, TILE_SIZE)
+	shape.shape = rect
+	exit_area.add_child(shape)
+	exit_area.position = Vector2(ROOM_W / 2 * TILE_SIZE + TILE_SIZE / 2, TILE_SIZE / 2)
+	exit_area.body_entered.connect(_on_exit_entered)
+	exit_area.collision_mask = 1
+	add_child(exit_area)
+
+	var exit_label := Label.new()
+	exit_label.text = "EXIT"
+	exit_label.add_theme_font_size_override("font_size", 14)
+	exit_label.add_theme_color_override("font_color", Color(0.6, 0.8, 0.3, 0.7))
+	exit_label.position = Vector2(ROOM_W / 2 * TILE_SIZE + 24, 8)
+	exit_label.mouse_filter = 2
+	add_child(exit_label)
+
+	var exit_arrow := ColorRect.new()
+	exit_arrow.size = Vector2(TILE_SIZE / 2, 4)
+	exit_arrow.position = Vector2(ROOM_W / 2 * TILE_SIZE + TILE_SIZE / 4, TILE_SIZE + TILE_SIZE / 2)
+	exit_arrow.color = Color(0.3, 0.8, 0.2, 0.5)
+	add_child(exit_arrow)
+
+func _on_exit_entered(body: Node) -> void:
+	if body == _player and not _exiting:
+		_exit_room()
 
 func _pick_wall_tile(x: int, y: int) -> Vector2i:
 	var n := _is_wall(Vector2i(x, y - 1))
@@ -103,7 +137,9 @@ func _pick_wall_tile(x: int, y: int) -> Vector2i:
 func _is_wall(cell: Vector2i) -> bool:
 	if cell.x < 0 or cell.x >= ROOM_W or cell.y < 0 or cell.y >= ROOM_H:
 		return false
-	return cell.x == 0 or cell.x == ROOM_W - 1 or cell.y == 0 or cell.y == ROOM_H - 1
+	if cell.y == 0 or cell.y == ROOM_H - 1:
+		return not (cell.x == ROOM_W / 2)
+	return cell.x == 0 or cell.x == ROOM_W - 1
 
 func _spawn_player() -> void:
 	_player = CharacterBody2D.new()
@@ -132,7 +168,7 @@ func _setup_ui() -> void:
 	var cl := CanvasLayer.new()
 	cl.name = "UI"
 	var label := Label.new()
-	label.text = "WASD to move  |  T to return  |  ESC pause"
+	label.text = "WASD to move  |  Reach the EXIT at the top  |  ESC pause"
 	label.add_theme_font_size_override("font_size", 12)
 	label.add_theme_color_override("font_color", Color(0.6, 0.6, 0.7))
 	label.position = Vector2(8, 8)
@@ -144,10 +180,6 @@ func reveal() -> void:
 	if GridTrans.is_available() and not GridTrans.is_busy():
 		await GridTrans.reveal(0.8)
 	_can_move = true
-
-func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.keycode == KEY_T and event.pressed and not event.echo:
-		_exit_room()
 
 func _process(delta: float) -> void:
 	if not _can_move or not _player:
@@ -170,6 +202,9 @@ func _center_camera() -> void:
 	cam.position = Vector2(max(cx, 0), max(cy, 0))
 
 func _exit_room() -> void:
+	if _exiting:
+		return
+	_exiting = true
 	_can_move = false
 	if GridTrans.is_available() and not GridTrans.is_busy():
 		await GridTrans.cover(0.8)

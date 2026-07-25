@@ -53,10 +53,25 @@ func _start_gameplay() -> void:
 	GameManager.state_changed.connect(_on_game_state_changed)
 	var pause_menu = preload("res://scenes/ui/pause_menu.tscn").instantiate()
 	add_child(pause_menu)
+	_setup_inventory()
+
+func _setup_inventory() -> void:
+	var inv_layer := CanvasLayer.new()
+	inv_layer.name = "InventoryLayer"
+	inv_layer.layer = 10
+	var inv := preload("res://scripts/room/dungeon_inventory.gd").new()
+	inv.name = "InventoryUI"
+	inv.anchor_left = 0.0
+	inv.anchor_top = 0.0
+	inv.anchor_right = 1.0
+	inv.anchor_bottom = 1.0
+	inv_layer.add_child(inv)
+	add_child(inv_layer)
 
 func _on_game_state_changed(new_state: int) -> void:
-	if new_state == GameManager.GameState.WIN:
-		_show_ending()
+	match new_state:
+		GameManager.GameState.WIN:
+			_show_ending()
 
 func _show_ending() -> void:
 	if forest_level:

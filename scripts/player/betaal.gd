@@ -13,7 +13,7 @@ var _rig: Dictionary = {}
 func _ready() -> void:
 	GameManager.state_changed.connect(_on_game_state_changed)
 
-	scale = Vector2(0.78, 0.78)
+	scale = Vector2(-0.78, 0.78)
 	_rig = HumanoidRig.build(self, Color(0.22, 0.4, 0.95), Color(0.35, 0.5, 0.95))
 	_pose_piggyback()
 
@@ -57,7 +57,7 @@ func _play_fly_away() -> void:
 func reappear() -> void:
 	visible = true
 	modulate = Color.WHITE
-	scale = Vector2(0.78, 0.78)
+	scale = Vector2(-0.78, 0.78)
 	position = Vector2.ZERO
 	current_state = BetaalState.IDLE
 	_bubble.visible = false

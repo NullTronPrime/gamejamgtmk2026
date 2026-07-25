@@ -451,6 +451,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			var game := get_node_or_null("/root/Game")
 			if game and game.has_method("enter_cave"):
 				game.enter_cave()
+	if event is InputEventKey and event.keycode == KEY_I and event.pressed and not event.echo:
+		var inv = get_node_or_null("/root/Game/InventoryLayer/InventoryUI")
+		if inv and inv.has_method("toggle"):
+			inv.toggle()
 
 func _test_spiral() -> void:
 	await GridTrans.play(3.2)
@@ -867,60 +871,60 @@ func _inject_environment_questions() -> void:
 
 func _add_new_riddles() -> void:
 	RiddleManager.add_riddle(
-		"sample text",
-		"sample text", "sample text", "sample text", "sample text",
+		"I am the keeper of the tale. Betaal hangs from a tree, but whose body hangs and whose soul speaks?",
+		"Betaal's soul speaks through a corpse", "Vikram's body hangs on the tree", "The tree itself is alive", "Neither — it is all a dream",
 		RiddleManager.PuzzleType.PARADOX,
-		"sample text",
-		"sample text"
+		"A corpse that speaks — you know a king must listen to the dead to rule the living.",
+		"You mistake the hanger for the hanged. A king must know who carries whom."
 	)
 	RiddleManager.add_riddle(
-		"sample text",
-		"sample text", "sample text", "sample text", "sample text",
+		"What cannot be seen but is always present? It fills the space between king and subject, between man and ghost.",
+		"Silence", "Fear", "The wind", "Darkness",
 		RiddleManager.PuzzleType.PARADOX,
-		"sample text",
-		"sample text"
+		"Silence carries more truth than words. You know when to listen.",
+		"You answer too quickly. A king must sit with silence before he speaks."
 	)
 	RiddleManager.add_riddle(
-		"sample text",
-		"sample text", "sample text", "sample text", "sample text",
+		"Betaal tells a story of a boy who could see the future. Was the boy blessed or cursed?",
+		"Both — sight without power to change is a curse", "Blessed, for knowledge is always a gift", "Cursed, for he saw only death", "Neither — the story is a lie",
 		RiddleManager.PuzzleType.PARADOX,
-		"sample text",
-		"sample text"
+		"To see and be powerless — that is the heaviest crown. You understand fate's cruelty.",
+		"You see prophecy as a gift. Come back when you have carried a truth you cannot change."
 	)
 	RiddleManager.add_riddle(
-		"sample text",
-		"sample text", "sample text", "sample text", "sample text",
-		RiddleManager.PuzzleType.PARADOX,
-		"sample text",
-		"sample text"
-	)
-	RiddleManager.add_riddle(
-		"sample text",
-		"sample text", "sample text", "sample text", "sample text",
+		"How many times must a king die before he becomes a legend?",
+		"Twice — once in body, once in story", "Once — death is death", "Thrice — body, name, and memory", "Never — legends are born, not made",
 		RiddleManager.PuzzleType.OBSERVATION,
-		"sample text",
-		"sample text"
+		"A king dies twice: once when his breath stops, once when his story ends. You know the weight of legacy.",
+		"You think death is simple. A king's death is never his own — it belongs to the tale."
 	)
 	RiddleManager.add_riddle(
-		"sample text",
-		"sample text", "sample text", "sample text", "sample text",
+		"A wife waits for her husband who went to war. A mother waits for her son who went to sea. Who waits longer?",
+		"The wife, for she waits knowing he chose to go", "The mother, for she carried him first", "Both wait the same", "Neither — waiting is not a contest",
 		RiddleManager.PuzzleType.OBSERVATION,
-		"sample text",
-		"sample text"
+		"A wife's wait is a choice renewed each dawn. You understand the weight of chosen love.",
+		"You measure love by blood alone. A king's heart must hold more than kinship."
 	)
 	RiddleManager.add_riddle(
-		"sample text",
-		"sample text", "sample text", "sample text", "sample text",
+		"If a tree falls in the forest and no one is around, does Betaal still laugh?",
+		"Yes — Betaal laughs at everything", "No — sound needs ears", "The tree does not fall — it is already a ghost", "Betaal is always around",
 		RiddleManager.PuzzleType.OBSERVATION,
-		"sample text",
-		"sample text"
+		"Betaal laughs whether you hear him or not. Some truths exist beyond your knowing.",
+		"You think truth needs a witness. The forest knows, even if you don't."
 	)
 	RiddleManager.add_riddle(
-		"sample text",
-		"sample text", "sample text", "sample text", "sample text",
+		"What grows as you give it away?",
+		"Wisdom", "Wealth", "Fear", "Darkness",
 		RiddleManager.PuzzleType.OBSERVATION,
-		"sample text",
-		"sample text"
+		"Wisdom multiplies when shared. A king who hoards knowledge rules an empty hall.",
+		"You think of coin. A king who measures all in gold will find his treasury full and his kingdom empty."
+	)
+	RiddleManager.add_riddle(
+		"Betaal tells a story of a priest, a thief, and a ghost. Who was the most honest?",
+		"The ghost — for it never pretended to be alive", "The priest — for he served the gods", "The thief — for he took only what he needed", "None — honesty is a mask we all wear",
+		RiddleManager.PuzzleType.OBSERVATION,
+		"The dead cannot lie. You see that honesty belongs to those with nothing to lose.",
+		"You trust the living. A king who trusts masks will wear one himself."
 	)
 
 	# Miro board riddles
@@ -1044,6 +1048,7 @@ func _on_crossroad_trigger_entered(body: Node2D, crossroad_idx: int) -> void:
 
 func _trigger_betaal_riddle() -> void:
 	is_waiting_for_response = true
+	_inject_environment_questions()
 	current_riddle_data = RiddleManager.get_random_riddle()
 	if current_riddle_data.is_empty():
 		is_waiting_for_response = false

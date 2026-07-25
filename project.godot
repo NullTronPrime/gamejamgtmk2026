@@ -31,6 +31,7 @@ Save="*uid://en34tojocj5f"
 PhantomCameraManager="*res://addons/phantom_camera/scripts/managers/phantom_camera_manager.gd"
 Transition="*uid://bumubpvh62b0y"
 RoomGrid="*res://scripts/room/room_grid.gd"
+GameInventory="*res://scripts/autoload/game_inventory.gd"
 
 [display]
 

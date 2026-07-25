@@ -42,6 +42,8 @@ func start_run() -> void:
 	question_saves = 0
 	active_buffs.clear()
 	current_run += 1
+	if GameInventory:
+		GameInventory.clear()
 	change_state(GameState.PLAYING)
 
 func _process(delta: float) -> void:

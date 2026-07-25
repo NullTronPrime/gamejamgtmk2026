@@ -37,4 +37,5 @@ func _on_resume() -> void:
 func _on_quit() -> void:
 	resume_game()
 	GameManager.trigger_reset()
-	get_tree().change_scene_to_file("res://scenes/title_screen.tscn")
+	RiddleManager.clear_pool()
+	get_tree().change_scene_to_file("res://scenes/game.tscn")

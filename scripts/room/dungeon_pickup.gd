@@ -62,7 +62,17 @@ func _build_sprite() -> void:
 	var colors: Dictionary = {
 		"bottle_empty": { "body": Color(0.15, 0.6, 0.15), "detail": Color(0.25, 0.7, 0.25) },
 		"liquid_blue": { "body": Color(0.15, 0.25, 0.85), "detail": Color(0.1, 0.15, 0.6) },
-		"potion_filled": { "body": Color(0.3, 0.5, 0.6), "detail": Color(0.4, 0.6, 0.7) }
+		"potion_filled": { "body": Color(0.3, 0.5, 0.6), "detail": Color(0.4, 0.6, 0.7) },
+		"arrow": { "body": Color(0.6, 0.5, 0.3), "detail": Color(0.4, 0.35, 0.2) },
+		"milk_bowl": { "body": Color(0.9, 0.85, 0.7), "detail": Color(0.95, 0.9, 0.8) },
+		"egg": { "body": Color(0.95, 0.8, 0.6), "detail": Color(0.9, 0.75, 0.55) },
+		"torn_cape": { "body": Color(0.4, 0.15, 0.15), "detail": Color(0.35, 0.12, 0.12) },
+		"dagger": { "body": Color(0.5, 0.5, 0.5), "detail": Color(0.6, 0.6, 0.6) },
+		"key": { "body": Color(0.8, 0.7, 0.2), "detail": Color(0.7, 0.6, 0.15) },
+		"flower_bunch": { "body": Color(0.9, 0.3, 0.5), "detail": Color(0.7, 0.2, 0.4) },
+		"berry": { "body": Color(0.8, 0.1, 0.1), "detail": Color(0.6, 0.05, 0.05) },
+		"letter_shaktinath": { "body": Color(0.9, 0.8, 0.5), "detail": Color(0.7, 0.6, 0.3) },
+		"snake_scales": { "body": Color(0.2, 0.6, 0.3), "detail": Color(0.15, 0.5, 0.25) }
 	}
 	var pal: Dictionary = colors.get(item_id, colors["bottle_empty"])
 
@@ -96,17 +106,10 @@ func _build_sprite() -> void:
 	add_child(wgt_fill)
 
 func _find_player() -> Node2D:
-	for room in ["DungeonLevel", "CaveLevel"]:
+	for room in ["DungeonLevel", "CaveLevel", "RoomLevel"]:
 		var p := get_node_or_null("/root/Game/" + room + "/Player")
 		if p:
 			return p
-	return null
-
-func _find_inventory() -> Node:
-	for room in ["DungeonLevel", "CaveLevel"]:
-		var inv := get_node_or_null("/root/Game/" + room + "/InventoryUI")
-		if inv:
-			return inv
 	return null
 
 func _process(_delta: float) -> void:
@@ -126,9 +129,6 @@ func _process(_delta: float) -> void:
 
 func _input(event: InputEvent) -> void:
 	if _in_range and event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		var inv: Node = _find_inventory()
-		var inv_control: DungeonInventory = inv as DungeonInventory if inv else null
-		if inv_control and not inv_control.visible:
-			if inv_control.add_item(item_id):
-				picked_up.emit(item_id)
-				queue_free()
+		if GameInventory.add_item(item_id):
+			picked_up.emit(item_id)
+			queue_free()
