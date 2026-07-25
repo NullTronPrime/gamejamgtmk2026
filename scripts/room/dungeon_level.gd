@@ -111,88 +111,65 @@ func _carve_room() -> void:
 
 	_player_spawn = Vector2i(2, ROOM_H - 3)
 
-## Blob autotile — each 32×32 sub-tile checks its own 4 neighbours
-## in a virtual grid where each 64×64 cell is 2×2 sub-tiles.
-func _vx(x: int, dx: int) -> int:
-	return x * 2 + dx
-
-func _vy(y: int, dy: int) -> int:
-	return y * 2 + dy
-
-func _vtile(vx: int, vy: int, t: TileType) -> bool:
-	var gx := vx / 2
-	var gy := vy / 2
-	if gx < 0 or gx >= ROOM_W or gy < 0 or gy >= ROOM_H:
+## Tile atlas helpers — each 64×64 cell renders as 2×2 sub-tiles (32×32 each).
+func _tile_is(x: int, y: int, t: TileType) -> bool:
+	if x < 0 or x >= ROOM_W or y < 0 or y >= ROOM_H:
 		return false
-	return _grid[gx][gy] == t
+	return _grid[x][y] == t
 
-func _vbitmask(vx: int, vy: int, t: TileType) -> int:
-	var n := 1 if _vtile(vx, vy - 1, t) else 0
-	var s := 1 if _vtile(vx, vy + 1, t) else 0
-	var w := 1 if _vtile(vx - 1, vy, t) else 0
-	var e := 1 if _vtile(vx + 1, vy, t) else 0
+## Compute the cell-level bitmask (checking 64×64 grid neighbours).
+func _cell_bitmask(x: int, y: int, t: TileType) -> int:
+	var n := 1 if _tile_is(x, y - 1, t) else 0
+	var s := 1 if _tile_is(x, y + 1, t) else 0
+	var w := 1 if _tile_is(x - 1, y, t) else 0
+	var e := 1 if _tile_is(x + 1, y, t) else 0
 	return n + s * 2 + w * 4 + e * 8
 
-## Row-0 tile (grass surface) for a given bitmask.
-## vparity = (vx + vy) & 1 for tiling alternation.
-func _grass_top(bm: int, vparity: int) -> Vector2i:
+## Return the atlas tile for sub-cell (dx,dy) within a 64×64 FLOOR cell.
+## bm = cell-level bitmask, exposed = true if no FLOOR in cell above.
+func _floor_tile(bm: int, dx: int, dy: int, exposed: bool) -> Vector2i:
+	# Surface grass row (dy=0, no floor above)
+	if dy == 0 and exposed:
+		match bm:
+			2:   return Vector2i(5, 0)  # S only — isolated pillar → dirt overhang
+			6:   return Vector2i(0, 0) if dx == 0 else Vector2i(5, 0)  # S+W — left edge
+			10:  return Vector2i(5, 0) if dx == 0 else Vector2i(1, 0)  # S+E — right edge
+			14:  return Vector2i(0, 0) if dx == 0 else Vector2i(1, 0)  # S+W+E — flat interior
+			_:   return Vector2i(2, 0)  # fallback — standalone flat top
+	# Dirt body row (dy=1, or any dy when underground)
+	var col := 4  # default solid fill
 	match bm:
-		0:  return Vector2i(0, 0)
-		1:  return Vector2i(2, 0)
-		2:  return Vector2i(5, 0)
-		3:  return Vector2i(4, 0)
-		4:  return Vector2i(0, 0)
-		5:  return Vector2i(0, 0)
-		6:  return Vector2i(0, 0)
-		7:  return Vector2i(0, 0)
-		8:  return Vector2i(1, 0)
-		9:  return Vector2i(1, 0)
-		10: return Vector2i(1, 0)
-		11: return Vector2i(1, 0)
-		12: return Vector2i(vparity, 0)
-		13: return Vector2i(vparity, 0)
-		14: return Vector2i(vparity, 0)
-		15: return Vector2i(4, 0)
-		_:  return Vector2i(0, 0)
+		0:   col = 0  # isolated
+		1:   col = 0  # N only
+		2:   col = 5  # S only — exposed below
+		3:   col = 4  # N+S
+		4:   col = 2 if dx == 0 else 5  # W only — exposed right
+		5:   col = 2 if dx == 0 else 0  # N+W
+		6:   col = 1 if dx == 0 else 5  # S+W — exposed right
+		7:   col = 5 if dx == 0 else 0  # N+S+W
+		8:   col = 5 if dx == 0 else 2  # E only — exposed left
+		9:   col = 0 if dx == 0 else 2  # N+E
+		10:  col = 5 if dx == 0 else 1  # S+E — exposed left
+		11:  col = 0 if dx == 0 else 5  # N+S+E
+		12:  col = 4  # W+E — horizontal strip, solid
+		13:  col = 0 if dx == 0 else 1  # N+W+E — Chunk A bottom
+		14:  col = 0 if dx == 0 else 1  # S+W+E — Chunk A bottom
+		15:  col = 4  # all 4 — deep fill
+		_:   col = 4
+	return Vector2i(col, 1)
 
-## Row-1 tile (dirt body) for a given bitmask.
-## vparity = (vx + vy) & 1 for tiling alternation.
-func _dirt_body(bm: int, vparity: int) -> Vector2i:
-	match bm:
-		0:  return Vector2i(0, 1)
-		1:  return Vector2i(0, 1)
-		2:  return Vector2i(5, 1)
-		3:  return Vector2i(4, 1)
-		4:  return Vector2i(2, 1)
-		5:  return Vector2i(2, 1)
-		6:  return Vector2i(5, 1)
-		7:  return Vector2i(5, 1)
-		8:  return Vector2i(5, 1)
-		9:  return Vector2i(5, 1)
-		10: return Vector2i(5, 1)
-		11: return Vector2i(6, 1)
-		12: return Vector2i(4, 1)
-		13: return Vector2i(vparity, 1)
-		14: return Vector2i(vparity, 1)
-		15: return Vector2i(4, 1)
-		_:   return Vector2i(4, 1)
-
-## Background cave tile column for wall/platform bitmask.
-func _bg_column(bitmask: int) -> int:
-	var n := bitmask & 1
-	var s := (bitmask >> 1) & 1
-	var w := (bitmask >> 2) & 1
-	var e := (bitmask >> 3) & 1
-	var c := n + s + w + e
+## Cave tile for WALL / PLATFORM — biases toward dense fill so pillars
+## and platforms don't show transparent "hole" tiles.
+func _cave_tile(bm: int, dy: int) -> Vector2i:
+	var c := (bm & 1) + ((bm >> 1) & 1) + ((bm >> 2) & 1) + ((bm >> 3) & 1)
+	var col := 4  # default dense fill
 	if c == 0:
-		return 0
-	if c == 4:
-		return 5
-	if c == 3:
-		return 4
-	if (n and s) or (w and e):
-		return 2
-	return 3
+		col = 2   # isolated — use Chunk-B edge
+	elif c >= 3:
+		col = 4 if c == 3 else 5  # 3→dense, 4→solid variant
+	elif (bm & 3) == 3 or (bm & 12) == 12:
+		col = 3   # straight run → hole-accent variant
+	return Vector2i(col, 2 if dy == 0 else 3)
 
 func _add_tiles() -> void:
 	var tex := preload("res://assets/dungeon/fore_jungle_grass.png")
@@ -215,18 +192,13 @@ func _add_tiles() -> void:
 			body.add_child(shape)
 			add_child(body)
 
-			var vx0 := _vx(x, 0)
-			var vy0 := _vy(y, 0)
-
 			match t:
 				TileType.FLOOR:
+					var bm := _cell_bitmask(x, y, TileType.FLOOR)
+					var exposed := not _tile_is(x, y - 1, TileType.FLOOR)
 					for dy in 2:
 						for dx in 2:
-							var vx := vx0 + dx
-							var vy := vy0 + dy
-							var bm := _vbitmask(vx, vy, TileType.FLOOR)
-							var vp := (vx + vy) & 1
-							var r := _grass_top(bm, vp) if dy == 0 else _dirt_body(bm, vp)
+							var r := _floor_tile(bm, dx, dy, exposed)
 							var sp := Sprite2D.new()
 							sp.texture = tex
 							sp.region_enabled = true
@@ -236,14 +208,13 @@ func _add_tiles() -> void:
 							sp.z_index = -1
 							add_child(sp)
 				TileType.WALL, TileType.PLATFORM:
+					var bm := _cell_bitmask(x, y, t)
 					for dy in 2:
-						var vy := vy0 + dy
-						var bm := _vbitmask(vx0, vy, t)
-						var col := _bg_column(bm)
+						var r := _cave_tile(bm, dy)
 						var sp := Sprite2D.new()
 						sp.texture = tex
 						sp.region_enabled = true
-						sp.region_rect = Rect2(col * ts, (2 + dy) * ts, ts, ts)
+						sp.region_rect = Rect2(r.x * ts, r.y * ts, ts, ts)
 						sp.texture_filter = 0
 						sp.position = Vector2(x * TILE_SIZE + hs, y * TILE_SIZE + dy * ts + ts * 0.5)
 						sp.z_index = -1
