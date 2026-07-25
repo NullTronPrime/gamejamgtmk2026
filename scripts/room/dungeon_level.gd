@@ -83,9 +83,12 @@ func _generate_room() -> void:
 	_add_pickups()
 
 func _carve_room() -> void:
+	# The jungle dirt art includes a three-deep surface megablock; build the
+	# generated ground to that depth instead of a shallow two-cell strip.
 	for x in ROOM_W:
 		_grid[x][ROOM_H - 1] = TileType.FLOOR
 		_grid[x][ROOM_H - 2] = TileType.FLOOR
+		_grid[x][ROOM_H - 3] = TileType.FLOOR
 
 	for x in ROOM_W:
 		_grid[x][0] = TileType.WALL
@@ -109,7 +112,7 @@ func _carve_room() -> void:
 			if px + w < ROOM_W - 1:
 				_grid[px + w][py] = TileType.PLATFORM
 
-	_player_spawn = Vector2i(2, ROOM_H - 3)
+	_player_spawn = Vector2i(2, ROOM_H - 4)
 
 ## Jungle tileset helpers — the source art is a 16×16 connecting sheet.
 ## Each gameplay cell is 64×64, so it renders as a 4×4 block of source tiles.
@@ -129,9 +132,13 @@ const SE_BIT := 128
 ## corner, and diagonal join pieces to the right.  The old code treated the sheet
 ## as 32×32 cells, which cut across those 16×16 logical pieces and made the
 ## generated level connect incorrectly.
-const FLOOR_TOP_TILE := Vector2i(2, 0)
-const FLOOR_TOP_BODY_TILE := Vector2i(2, 1)
-const FLOOR_DIRT_TILE := Vector2i(2, 2)
+const THREE_DEEP_DIRT_PATTERN := [
+	[Vector2i(8, 0), Vector2i(9, 0), Vector2i(10, 0), Vector2i(11, 0)],
+	[Vector2i(8, 1), Vector2i(9, 1), Vector2i(10, 1), Vector2i(11, 1)],
+	[Vector2i(8, 2), Vector2i(9, 2), Vector2i(10, 2), Vector2i(11, 2)],
+	[Vector2i(8, 3), Vector2i(9, 3), Vector2i(10, 3), Vector2i(10, 3)],
+]
+const FLOOR_DIRT_TILE := Vector2i(8, 2)
 const CAVE_FILL_TILE := Vector2i(2, 6)
 
 func _tile_is(x: int, y: int, t: TileType) -> bool:
@@ -173,20 +180,16 @@ func _has(mask: int, bit: int) -> bool:
 ## Pick one 16×16 foreground autotile. The mask is computed at the same
 ## 16 px resolution as the atlas, so internal subtiles connect to each other
 ## and side/diagonal pieces only appear on the true perimeter.
-func _floor_subtile(mask: int, _sx: int, sy: int) -> Vector2i:
+func _floor_subtile(mask: int, sx: int, sy: int) -> Vector2i:
 	var north := _has(mask, N_BIT)
 
-	# Generated dungeon geometry must be continuous. Most of this sheet is edge,
-	# corner, or socket art with transparent margins; repeating those pieces
-	# creates seams every source tile. Use only tiles that visually continue when
-	# repeated, then add a grass cap only on the true exposed top.
+	# Use the atlas' three-deep dirt megablock for the actual exposed surface.
+	# Repeating one arbitrary tile leaves a dark seam below the grass; this block
+	# contains the intended grass-to-dirt transition rows. Buried cells use a
+	# seamless dirt fill so stacked terrain remains continuous.
 	if north:
 		return FLOOR_DIRT_TILE
-	if sy == 0:
-		return FLOOR_TOP_TILE
-	if sy == 1:
-		return FLOOR_TOP_BODY_TILE
-	return FLOOR_DIRT_TILE
+	return THREE_DEEP_DIRT_PATTERN[sy][sx]
 
 func _cave_subtile(_mask: int, _sx: int, _sy: int) -> Vector2i:
 	# Generated cave geometry also needs to be continuous; avoid every cave
@@ -235,7 +238,7 @@ func _add_tiles() -> void:
 func _add_ladder() -> void:
 	var lx := _rng.randi_range(5, ROOM_W - 6)
 	var top_y := _rng.randi_range(3, ROOM_H - 6)
-	var bot_y := ROOM_H - 2
+	var bot_y := ROOM_H - 4
 
 	for y in range(top_y, bot_y + 1):
 		_grid[lx][y] = TileType.LADDER
@@ -292,7 +295,7 @@ func _add_blocks() -> void:
 	while placed < count and attempts < 30:
 		attempts += 1
 		var px := _rng.randi_range(2, ROOM_W - 3)
-		var py := ROOM_H - 3
+		var py := ROOM_H - 4
 		if _grid[px][py] != TileType.FLOOR and _grid[px][py + 1] != TileType.FLOOR:
 			continue
 		if abs(px - _player_spawn.x) < 3:
@@ -350,7 +353,7 @@ func _add_blocks() -> void:
 func _add_pickups() -> void:
 	var item_types := ["bottle_empty", "liquid_blue"]
 	var px := _rng.randi_range(8, ROOM_W - 4)
-	var py := ROOM_H - 3
+	var py := ROOM_H - 4
 	for id in item_types:
 		var p := DungeonPickup.new()
 		p.item_id = id
