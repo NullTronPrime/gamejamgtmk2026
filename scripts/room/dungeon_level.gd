@@ -129,19 +129,10 @@ const SE_BIT := 128
 ## corner, and diagonal join pieces to the right.  The old code treated the sheet
 ## as 32×32 cells, which cut across those 16×16 logical pieces and made the
 ## generated level connect incorrectly.
-const SOLID_DIRT_PATTERN := [
-	[Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(3, 0)],
-	[Vector2i(0, 1), Vector2i(1, 1), Vector2i(2, 1), Vector2i(3, 1)],
-	[Vector2i(0, 2), Vector2i(1, 2), Vector2i(2, 2), Vector2i(3, 2)],
-	[Vector2i(0, 3), Vector2i(1, 3), Vector2i(2, 3), Vector2i(3, 3)],
-]
-
-const CAVE_PATTERN := [
-	[Vector2i(8, 4), Vector2i(9, 4), Vector2i(10, 4), Vector2i(10, 4)],
-	[Vector2i(8, 5), Vector2i(9, 5), Vector2i(10, 5), Vector2i(10, 5)],
-	[Vector2i(8, 6), Vector2i(9, 6), Vector2i(10, 6), Vector2i(10, 6)],
-	[Vector2i(8, 6), Vector2i(9, 6), Vector2i(10, 6), Vector2i(10, 6)],
-]
+const FLOOR_TOP_TILE := Vector2i(2, 0)
+const FLOOR_TOP_BODY_TILE := Vector2i(2, 1)
+const FLOOR_DIRT_TILE := Vector2i(2, 2)
+const CAVE_FILL_TILE := Vector2i(2, 6)
 
 func _tile_is(x: int, y: int, t: TileType) -> bool:
 	if x < 0 or x >= ROOM_W or y < 0 or y >= ROOM_H:
@@ -178,28 +169,29 @@ func _micro_neighbor_mask(mx: int, my: int, t: TileType) -> int:
 func _has(mask: int, bit: int) -> bool:
 	return (mask & bit) != 0
 
-func _pattern_tile(pattern: Array, sx: int, sy: int) -> Vector2i:
-	return pattern[sy][sx]
 
 ## Pick one 16×16 foreground autotile. The mask is computed at the same
 ## 16 px resolution as the atlas, so internal subtiles connect to each other
 ## and side/diagonal pieces only appear on the true perimeter.
-func _floor_subtile(mask: int, sx: int, sy: int) -> Vector2i:
+func _floor_subtile(mask: int, _sx: int, sy: int) -> Vector2i:
 	var north := _has(mask, N_BIT)
 
-	# The sheet already contains a coherent 4×4 foreground autotile block at
-	# (0..3, 0..3). Do not use the transparent connector/socket tiles as fill;
-	# those are for hand-authored edges and create holes when repeated inside
-	# generated solid terrain.
+	# Generated dungeon geometry must be continuous. Most of this sheet is edge,
+	# corner, or socket art with transparent margins; repeating those pieces
+	# creates seams every source tile. Use only tiles that visually continue when
+	# repeated, then add a grass cap only on the true exposed top.
 	if north:
-		return Vector2i(sx, 2 + (sy % 2))
-	return _pattern_tile(SOLID_DIRT_PATTERN, sx, sy)
+		return FLOOR_DIRT_TILE
+	if sy == 0:
+		return FLOOR_TOP_TILE
+	if sy == 1:
+		return FLOOR_TOP_BODY_TILE
+	return FLOOR_DIRT_TILE
 
-func _cave_subtile(_mask: int, sx: int, sy: int) -> Vector2i:
-	# Use only dense cave fill for generated collision walls/platforms. The
-	# surrounding cave connector tiles in the atlas are transparent edge pieces,
-	# not safe interior fill for room geometry.
-	return _pattern_tile(CAVE_PATTERN, sx, sy)
+func _cave_subtile(_mask: int, _sx: int, _sy: int) -> Vector2i:
+	# Generated cave geometry also needs to be continuous; avoid every cave
+	# connector/socket tile and repeat one seamless fill sample.
+	return CAVE_FILL_TILE
 
 func _paint_subtile(tex: Texture2D, atlas: Vector2i, world_pos: Vector2) -> void:
 	var sp := Sprite2D.new()

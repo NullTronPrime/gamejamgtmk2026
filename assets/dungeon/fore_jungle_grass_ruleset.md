@@ -1,47 +1,36 @@
-# Fore - Jungle Grass connecting rules
+# Fore - Jungle Grass generated-geometry rules
 
 Source art: `assets/dungeon/fore_jungle_grass.png` is a **224×128** sheet of **16×16** logical tiles, arranged as **14 columns × 8 rows**.
 
-## Important implementation rule
+## What went wrong
 
-The sheet is an autotiling sheet, but not every 16×16 tile is a safe fill tile. Many of the tiles outside the main blocks contain transparent edge/corner/socket shapes. If those connector tiles are used as generic interior fill, the generated level gets square holes and disconnected blobs.
+The atlas is a connecting/autotile sheet, but most cells are **not continuous fill**. Many tiles are rounded edges, corners, holes, diagonal sockets, or decorative variants with transparent margins. Repeating those tiles in procedural geometry creates visible seams, square holes, and disconnected blobs.
 
-For generated dungeon collision geometry:
+Generated dungeon terrain must therefore use only atlas cells that can repeat continuously.
 
-1. Render each 64×64 gameplay cell as a 4×4 block of 16×16 atlas samples.
-2. Use the coherent foreground block `(0..3, 0..3)` for generated dirt/grass floor.
-3. If a 16×16 floor subtile has another floor subtile directly above it, render buried dirt rows from `(0..3, 2..3)` instead of repeating grass.
-4. Use dense cave samples for generated walls/platforms; do not use transparent cave connector/socket tiles as fill.
-5. Reserve the diagonal/side connector tiles for future hand-authored or true terrain-bitmask placement where empty space around a tile is intentional.
+## Continuous generated fill tiles
 
-## Coordinate system
-
-Atlas coordinates are `(x, y)` 16 px tile coordinates starting at the top-left tile `(0, 0)`.
-
-## Atlas regions
-
-| Region | Coordinates | Usage |
+| Generated use | Atlas tile | Reason |
 | --- | --- | --- |
-| Foreground generated floor block | `(0..3, 0..3)` | Main 64×64 grass-over-dirt block. Safe for generated solid floor. |
-| Buried foreground dirt rows | `(0..3, 2..3)` | Used when another floor subtile exists above, so stacked floor cells do not create repeated grass bands. |
-| Foreground connector/socket variants | `(4..11, 0..3)` | Transparent/autotile edge pieces. Do **not** use as generated interior fill. |
-| Sloped/large decoration | `(12..13, 0..4)` and `(12..13, 5..7)` | Hand-placed decorative terrain. |
-| Low-alpha cave connector area | `(0..7, 4..7)` | Mostly transparent cave edge/socket art. Do **not** use as generated interior fill. |
-| Dense cave fill samples | `(8..10, 4..6)` | Safest samples for generated cave walls/platforms. |
+| Exposed floor grass cap | `(2, 0)` | Repeats horizontally without left/right rounded margins. |
+| Dirt directly below exposed grass | `(2, 1)` | Continues the top surface without side gaps. |
+| Buried dirt/interior fill | `(2, 2)` | Full opaque dirt fill for stacked cells and lower floor rows. |
+| Cave wall/platform fill | `(2, 6)` | Full opaque cave fill sample; avoids transparent connector holes. |
 
-## Micro-grid mask
+## Runtime rule
 
-`DungeonLevel` expands each gameplay cell to four 16×16 subtiles in each direction, then computes neighbor information on that micro-grid. The direct north neighbor is currently used to suppress repeated grass in buried floor cells.
+Each 64×64 gameplay cell is still drawn as a 4×4 set of 16×16 samples. For every 16×16 sample, `DungeonLevel` checks the micro-grid north neighbor:
 
-| Bit | Neighbor |
-| --- | --- |
-| `1` | north `(x, y - 1)` |
-| `2` | south `(x, y + 1)` |
-| `4` | west `(x - 1, y)` |
-| `8` | east `(x + 1, y)` |
-| `16` | north-west `(x - 1, y - 1)` |
-| `32` | north-east `(x + 1, y - 1)` |
-| `64` | south-west `(x - 1, y + 1)` |
-| `128` | south-east `(x + 1, y + 1)` |
+- If a floor subtile has no floor directly above it, row `0` uses `(2, 0)`, row `1` uses `(2, 1)`, and rows `2..3` use `(2, 2)`.
+- If a floor subtile has floor directly above it, all rows use buried dirt `(2, 2)` so stacked cells remain continuous.
+- Walls and platforms always use cave fill `(2, 6)` for procedural geometry.
 
-The diagonal bits are still collected for future real edge/socket placement, but the generated room renderer deliberately avoids those transparent socket tiles as fill.
+## Tiles reserved for manual placement
+
+The remaining connector/variant areas are useful art, but they are not safe as procedural fill:
+
+- Foreground edge/socket variants around `(4..11, 0..3)`.
+- Low-alpha cave connector/socket areas around `(0..7, 4..7)` and `(8..11, 4..7)`.
+- Sloped/large decorative pieces around `(12..13, 0..7)`.
+
+Use those only for hand-authored edge decoration or a future dedicated autotile implementation that places them only on real exposed boundaries.
