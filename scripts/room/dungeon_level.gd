@@ -132,10 +132,7 @@ const SE_BIT := 128
 ## corner, and diagonal join pieces to the right.  The old code treated the sheet
 ## as 32×32 cells, which cut across those 16×16 logical pieces and made the
 ## generated level connect incorrectly.
-const GRASS_CAP_PATTERN := [
-	[Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(3, 0)],
-	[Vector2i(0, 1), Vector2i(1, 1), Vector2i(2, 1), Vector2i(3, 1)],
-]
+const GRASS_CAP_PATTERN := [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(3, 0)]
 const FLOOR_DIRT_TILE := Vector2i(2, 2)
 const CAVE_FILL_TILE := Vector2i(2, 6)
 
@@ -179,17 +176,18 @@ func _has(mask: int, bit: int) -> bool:
 ## 16 px resolution as the atlas, so internal subtiles connect to each other
 ## and side/diagonal pieces only appear on the true perimeter.
 func _floor_overlay_subtile(exposed_cell: bool, mask: int, mx: int, sy: int) -> Vector2i:
-	# The grass cap is a three-slice strip: column 0 is the left end, columns 1-2
-	# are tileable middle, and column 3 is the right end. Do not repeat the whole
-	# cap block per gameplay cell, or the ends appear every 64 px.
-	if not exposed_cell or sy >= GRASS_CAP_PATTERN.size():
+	# The grass cap is a single top-row, three-slice strip: column 0 is the
+	# left end, columns 1-2 are tileable middle, and column 3 is the right end.
+	# Rows below the top stay opaque dirt; do not paint the second edge row as
+	# another grass band.
+	if not exposed_cell or sy != 0:
 		return Vector2i(-1, -1)
 	if not _has(mask, W_BIT):
-		return GRASS_CAP_PATTERN[sy][0]
+		return GRASS_CAP_PATTERN[0]
 	if not _has(mask, E_BIT):
-		return GRASS_CAP_PATTERN[sy][3]
+		return GRASS_CAP_PATTERN[3]
 	var middle_col := 1 + (mx % 2)
-	return GRASS_CAP_PATTERN[sy][middle_col]
+	return GRASS_CAP_PATTERN[middle_col]
 
 func _cave_subtile(_mask: int, _sx: int, _sy: int) -> Vector2i:
 	# Generated cave geometry also needs to be continuous; avoid every cave
