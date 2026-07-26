@@ -4,9 +4,9 @@ signal finished()
 signal click_advanced()
 
 const IMAGES := [
-	preload("res://assets/art/cutscenes/cutscene_1.png"),
 	preload("res://assets/art/cutscenes/cutscene_2.png"),
 	preload("res://assets/art/cutscenes/cutscene_3.png"),
+	preload("res://assets/art/cutscenes/cutscene_1.png"),
 ]
 
 @onready var skip_button: Button = $SkipButton

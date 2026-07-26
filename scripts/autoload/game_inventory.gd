@@ -32,7 +32,7 @@ static func item_data() -> Dictionary:
 		"lion_skull": { "name": "Lion Skull", "icon": Color(0.8, 0.75, 0.6) },
 		"lion_torso": { "name": "Lion Torso", "icon": Color(0.75, 0.7, 0.55) },
 		"key": { "name": "Key", "icon": Color(0.8, 0.7, 0.2) },
-		"flower_bunch": { "name": "Bunch of Flowers", "icon": Color(0.9, 0.3, 0.5) },
+		"flower_bunch": { "name": "Bunch of Flowers", "icon": Color(0.9, 0.3, 0.5), "icon_texture": preload("res://assets/art/items/allflowersbunched.jpg") },
 		"berry": { "name": "Berry", "icon": Color(0.8, 0.1, 0.1) },
 		"letter_shaktinath": { "name": "Shaktinath's Letter", "icon": Color(0.9, 0.8, 0.5) },
 		"snake_scales": { "name": "Snake Scales", "icon": Color(0.2, 0.6, 0.3) },

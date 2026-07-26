@@ -75,6 +75,9 @@ func _on_game_state_changed(new_state: int) -> void:
 		GameManager.GameState.WIN:
 			_show_ending()
 
+func trigger_ending() -> void:
+	_show_ending()
+
 func _show_ending() -> void:
 	if forest_level:
 		forest_level.queue_free()
@@ -128,18 +131,18 @@ func exit_room() -> void:
 	if GridTrans.is_available() and not GridTrans.is_busy():
 		GridTrans.reveal(0.8)
 
-func enter_dungeon() -> void:
+func enter_dungeon() -> bool:
 	if dungeon_level:
-		return
+		return true
 	if not GridTrans.is_available() or GridTrans.is_busy():
-		return
-	await GridTrans.cover(0.8)
+		return false
 	if forest_level:
 		forest_level.visible = false
 		forest_level.process_mode = PROCESS_MODE_DISABLED
 		forest_level.set_backgrounds_visible(false)
 	dungeon_level = preload("res://scenes/world/dungeon_level.tscn").instantiate()
 	add_child(dungeon_level)
+	return true
 
 func exit_dungeon() -> void:
 	if not dungeon_level:
@@ -150,6 +153,8 @@ func exit_dungeon() -> void:
 		forest_level.visible = true
 		forest_level.process_mode = PROCESS_MODE_INHERIT
 		forest_level.set_backgrounds_visible(true)
+		if forest_level.has_method("_grave_completed"):
+			forest_level._grave_completed(1)
 	if GridTrans.is_available() and not GridTrans.is_busy():
 		GridTrans.reveal(0.8)
 
@@ -210,6 +215,8 @@ func exit_library_room() -> void:
 		var hud = forest_level.get_node_or_null("HUD")
 		if hud and hud.has_method("set_room_mode"):
 			hud.set_room_mode(false)
+		if forest_level.has_method("_grave_completed"):
+			forest_level._grave_completed(0)
 	if GridTrans.is_available() and not GridTrans.is_busy():
 		GridTrans.reveal(0.8)
 

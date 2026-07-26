@@ -56,6 +56,7 @@ var _berries_collected := 0
 var _flower_count_collected := 0
 
 var _snake_arrow_pickup: Area2D
+var _snake_sprite: Sprite2D
 var _pressure_plate: Area2D
 var _plate_visual: ColorRect
 var _cage_visual: ColorRect
@@ -152,9 +153,8 @@ func _build_terrain() -> void:
 		for y in [ROOM_H - 3, ROOM_H - 2, ROOM_H - 1]:
 			_grid[x][y] = TileType.WALL
 
-	var ground_tex := preload("res://assets/art/rooms/tilesets/Small_Rock_Tiles.png")
+	var ground_tex := preload("res://assets/art/rooms/wall_tile_dark.png")
 	var wall_tex := preload("res://assets/art/rooms/tilesets/Big_Tile_Rock.png")
-	var grass_tex := preload("res://assets/art/rooms/tilesets/Grass_Tiles.png")
 
 	var hs := TILE_SIZE * 0.5
 	for x in ROOM_W:
@@ -174,56 +174,98 @@ func _build_terrain() -> void:
 
 			var sp := Sprite2D.new()
 			sp.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-			if t == TileType.WALL:
+			if t == TileType.WALL or y < ROOM_H - 3:
 				sp.texture = wall_tex
-			elif y >= ROOM_H - 3:
-				if y == ROOM_H - 3:
-					sp.texture = grass_tex
-					sp.region_enabled = true
-					sp.region_rect = Rect2(6 * TILE_SIZE, 2 * TILE_SIZE, TILE_SIZE, TILE_SIZE)
-				else:
-					sp.texture = ground_tex
-					var idx := _rng.randi() % 4
-					var ax: int = [2, 3, 6, 7][idx]
-					sp.region_enabled = true
-					sp.region_rect = Rect2(ax * TILE_SIZE, 2 * TILE_SIZE, TILE_SIZE, TILE_SIZE)
 			else:
-				sp.texture = wall_tex
+				sp.texture = ground_tex
 			sp.position = Vector2(x * TILE_SIZE + hs, y * TILE_SIZE + hs)
 			sp.z_index = -1
 			add_child(sp)
 
-	_background_hills()
+	var grass_strip := ColorRect.new()
+	grass_strip.color = Color(0.25, 0.55, 0.18, 0.9)
+	grass_strip.size = Vector2(ROOM_W * TILE_SIZE, 6)
+	grass_strip.position = Vector2(0, (ROOM_H - 3) * TILE_SIZE - 2)
+	grass_strip.z_index = 0; grass_strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(grass_strip)
 
-func _background_hills() -> void:
-	for i in range(20):
-		var hx := i * 200 + _rng.randi_range(-30, 30)
-		var hw := _rng.randf_range(120, 300)
-		var hh := _rng.randf_range(40, 120)
-		var hy := ROOM_H * TILE_SIZE - 200 + _rng.randf_range(-20, 20)
+	_build_parallax_clouds()
+	_setup_leaf_particles()
 
-		var hill := ColorRect.new()
-		hill.size = Vector2(hw, hh)
-		hill.position = Vector2(hx - hw / 2, hy - hh)
-		hill.color = Color(0.2, 0.5, 0.15, 0.3)
-		hill.z_index = -2
-		hill.mouse_filter = 2
-		add_child(hill)
+var _parallax_layers: Array[Dictionary] = []
 
-		var outline := ColorRect.new()
-		outline.size = Vector2(hw + 4, 3)
-		outline.position = Vector2(hx - hw / 2 - 2, hy - 2)
-		outline.color = Color(0.15, 0.4, 0.1, 0.25)
-		outline.z_index = -2
-		outline.mouse_filter = 2
-		add_child(outline)
+func _build_parallax_clouds() -> void:
+	var pl := CanvasLayer.new()
+	pl.name = "CloudParallax"
+	pl.layer = -10
+	add_child(pl)
 
-	var dirt_path := ColorRect.new()
-	dirt_path.size = Vector2(ROOM_W * TILE_SIZE, 14)
-	dirt_path.position = Vector2(0, (ROOM_H - 3) * TILE_SIZE)
-	dirt_path.color = Color(0.35, 0.25, 0.15, 0.3)
-	dirt_path.z_index = -1
-	add_child(dirt_path)
+	var cloud_files := [
+		"cloud_1_1.png", "cloud_1_2.png", "cloud_1_3.png",
+		"cloud_2_1.png", "cloud_2_2.png",
+		"cloud_3_1.png", "cloud_3_2.png", "cloud_3_3.png", "cloud_3_4.png", "cloud_3_6.png",
+		"cloud_4_1.png", "cloud_4_2.png", "cloud_4_3.png",
+	]
+	var factors := [
+		0.01, 0.015, 0.02,
+		0.03, 0.04,
+		0.05, 0.06, 0.07, 0.08, 0.10,
+		0.12, 0.14, 0.16,
+	]
+	var vs := DisplayServer.window_get_size()
+	for fi in cloud_files.size():
+		var tex := load("res://assets/art/backgrounds/clouds/" + cloud_files[fi])
+		if not tex:
+			continue
+		var tex_w: int = tex.get_width()
+		var tex_h: int = tex.get_height()
+		var scale_y: float = vs.y / tex_h
+		var scale_x: float = scale_y
+		var scaled_w: float = tex_w * scale_x
+		var count: int = ceili(vs.x / scaled_w) + 3
+		var sprites: Array[Sprite2D] = []
+		for i in range(count):
+			var spr := Sprite2D.new()
+			spr.texture = tex
+			spr.scale = Vector2(scale_x, scale_y)
+			spr.centered = false
+			spr.position = Vector2((i - 1) * scaled_w, 0)
+			spr.z_index = -10 - fi
+			pl.add_child(spr)
+			sprites.append(spr)
+		_parallax_layers.append({ "sprites": sprites, "factor": factors[fi], "tex_w": scaled_w })
+
+func _setup_leaf_particles() -> void:
+	var leaf_tex := preload("res://assets/art/effects/leaffalling.jpg")
+	if not leaf_tex:
+		return
+
+	var particles := GPUParticles2D.new()
+	particles.name = "LeafParticles"
+	particles.position = Vector2(ROOM_W * TILE_SIZE * 0.5, -100)
+	particles.z_index = 0
+	particles.amount = 6
+	particles.lifetime = 10.0
+	particles.explosiveness = 0.0
+	particles.randomness = 0.5
+	particles.one_shot = false
+	particles.preprocess = 3.0
+	particles.visibility_rect = Rect2(-800, -100, 1600, 1000)
+	add_child(particles)
+
+	var mat := ParticleProcessMaterial.new()
+	mat.direction = Vector3(0.0, 1.0, 0.0)
+	mat.spread = 20.0
+	mat.gravity = Vector3(0.0, 5.0, 0.0)
+	mat.initial_velocity_min = 2.0
+	mat.initial_velocity_max = 6.0
+	mat.angular_velocity_min = -60.0
+	mat.angular_velocity_max = 60.0
+	mat.scale_min = 0.3
+	mat.scale_max = 0.6
+	mat.color = Color(0.6, 0.75, 0.3, 0.7)
+	particles.process_material = mat
+	particles.texture = leaf_tex
 
 func _build_stages() -> void:
 	_build_stage1_snake()
@@ -237,42 +279,12 @@ func _build_stage1_snake() -> void:
 	var sx := 8 * TILE_SIZE + TILE_SIZE / 2
 	var sy := (ROOM_H - 3) * TILE_SIZE - 8
 
-	var snake_body := ColorRect.new()
-	snake_body.size = Vector2(80, 12)
-	snake_body.position = Vector2(sx - 40, sy)
-	snake_body.color = Color(0.15, 0.5, 0.2)
-	snake_body.z_index = 1
-	add_child(snake_body)
-
-	var snake_head := ColorRect.new()
-	snake_head.size = Vector2(16, 10)
-	snake_head.position = Vector2(sx + 35, sy - 2)
-	snake_head.color = Color(0.1, 0.4, 0.15)
-	snake_head.z_index = 1
-	add_child(snake_head)
-
-	var arrow_shaft := ColorRect.new()
-	arrow_shaft.size = Vector2(3, 20)
-	arrow_shaft.position = Vector2(sx + 5, sy - 18)
-	arrow_shaft.color = Color(0.5, 0.35, 0.15)
-	arrow_shaft.rotation = 0.3
-	arrow_shaft.z_index = 2
-	add_child(arrow_shaft)
-
-	var arrow_head := ColorRect.new()
-	arrow_head.size = Vector2(8, 6)
-	arrow_head.position = Vector2(sx + 16, sy - 30)
-	arrow_head.color = Color(0.6, 0.6, 0.6)
-	arrow_head.rotation = 0.3
-	arrow_head.z_index = 2
-	add_child(arrow_head)
-
-	var blood := ColorRect.new()
-	blood.size = Vector2(18, 3)
-	blood.position = Vector2(sx + 10, sy + 4)
-	blood.color = Color(0.6, 0.05, 0.05, 0.5)
-	blood.z_index = 1
-	add_child(blood)
+	_snake_sprite = Sprite2D.new()
+	_snake_sprite.texture = preload("res://assets/art/rooms/snakedeadwitharrow.png")
+	_snake_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_snake_sprite.position = Vector2(sx, sy)
+	_snake_sprite.z_index = 1
+	add_child(_snake_sprite)
 
 	_snake_arrow_pickup = Area2D.new()
 	_snake_arrow_pickup.name = "SnakeArrowPickup"
@@ -299,14 +311,17 @@ func _on_snake_area_entered(body: Node) -> void:
 		_snake_retrieved = true
 		GameInventory.add_item("arrow")
 		_snake_arrow_pickup.queue_free()
+		if _snake_sprite:
+			_snake_sprite.texture = preload("res://assets/art/rooms/snakedeadwithoutarrow.png")
 		_show_stage_text("You retrieve the arrow from the snake's body.\nBetaal: 'An experienced warrior's work...'", 4.0)
 		var progress = _progress_labels[0]
 		if progress:
 			progress.modulate = Color(0.3, 0.8, 0.3, 0.8)
 
 func _build_stage2_boulder() -> void:
+	var surface_y := (ROOM_H - 3) * TILE_SIZE
 	var bx := 16 * TILE_SIZE
-	var by := (ROOM_H - 3) * TILE_SIZE - 24
+	var by := surface_y - 24
 
 	var mass := 3.0
 	var b := RigidBody2D.new()
@@ -355,17 +370,16 @@ func _build_stage2_boulder() -> void:
 	_blocks.append(b)
 
 	var px := 20 * TILE_SIZE + TILE_SIZE / 2
-	var py := (ROOM_H - 2) * TILE_SIZE - 2
 
 	_plate_visual = ColorRect.new()
-	_plate_visual.size = Vector2(48, 6)
-	_plate_visual.position = Vector2(px - 24, py - 6)
+	_plate_visual.size = Vector2(52, 6)
+	_plate_visual.position = Vector2(px - 26, surface_y - 6)
 	_plate_visual.color = Color(0.4, 0.35, 0.25)
 	add_child(_plate_visual)
 
 	var plate_highlight := ColorRect.new()
-	plate_highlight.size = Vector2(56, 10)
-	plate_highlight.position = Vector2(px - 28, py - 8)
+	plate_highlight.size = Vector2(60, 10)
+	plate_highlight.position = Vector2(px - 30, surface_y - 8)
 	plate_highlight.color = Color(0.6, 0.5, 0.2, 0.3)
 	plate_highlight.mouse_filter = 2
 	add_child(plate_highlight)
@@ -374,7 +388,7 @@ func _build_stage2_boulder() -> void:
 	plate_label.text = "[Plate]"
 	plate_label.add_theme_font_size_override("font_size", 9)
 	plate_label.add_theme_color_override("font_color", Color(0.8, 0.7, 0.3, 0.5))
-	plate_label.position = Vector2(px - 22, py + 8)
+	plate_label.position = Vector2(px - 22, surface_y + 8)
 	plate_label.mouse_filter = 2
 	add_child(plate_label)
 
@@ -382,10 +396,10 @@ func _build_stage2_boulder() -> void:
 	_pressure_plate.name = "PressurePlate"
 	var plate_shape := CollisionShape2D.new()
 	var plate_rect := RectangleShape2D.new()
-	plate_rect.size = Vector2(56, 16)
+	plate_rect.size = Vector2(60, 16)
 	plate_shape.shape = plate_rect
 	_pressure_plate.add_child(plate_shape)
-	_pressure_plate.position = Vector2(px, py + 6)
+	_pressure_plate.position = Vector2(px, surface_y - 2)
 	_pressure_plate.body_entered.connect(_on_plate_body_entered)
 	_pressure_plate.body_exited.connect(_on_plate_body_exited)
 	_pressure_plate.collision_mask = 2 | 1
@@ -393,14 +407,14 @@ func _build_stage2_boulder() -> void:
 
 	_cage_visual = ColorRect.new()
 	_cage_visual.size = Vector2(48, 36)
-	_cage_visual.position = Vector2(px - 24, py - 100)
+	_cage_visual.position = Vector2(px - 24, surface_y - 100)
 	_cage_visual.color = Color(0.3, 0.25, 0.15, 0.0)
 	_cage_visual.z_index = 1
 	add_child(_cage_visual)
 
 	var cage_bars := ColorRect.new()
 	cage_bars.size = Vector2(48, 36)
-	cage_bars.position = Vector2(px - 24, py - 100)
+	cage_bars.position = Vector2(px - 24, surface_y - 100)
 	cage_bars.color = Color(0.4, 0.35, 0.25, 0.0)
 	cage_bars.z_index = 2
 	add_child(cage_bars)
@@ -410,7 +424,7 @@ func _build_stage2_boulder() -> void:
 	cage_label.name = "CageLabel"
 	cage_label.add_theme_font_size_override("font_size", 9)
 	cage_label.add_theme_color_override("font_color", Color(0.8, 0.7, 0.3, 0.5))
-	cage_label.position = Vector2(px - 18, py - 110)
+	cage_label.position = Vector2(px - 18, surface_y - 110)
 	cage_label.mouse_filter = 2
 	add_child(cage_label)
 
@@ -421,7 +435,7 @@ func _build_stage2_boulder() -> void:
 	letter_rect.size = Vector2(40, 30)
 	letter_shape.shape = letter_rect
 	_cage_letter.add_child(letter_shape)
-	_cage_letter.position = Vector2(px, py - 82)
+	_cage_letter.position = Vector2(px, surface_y - 82)
 	_cage_letter.body_entered.connect(_on_letter_area_entered)
 	_cage_letter.collision_mask = 1
 	_cage_letter.monitoring = false
@@ -488,6 +502,7 @@ func _build_stage3_flowers() -> void:
 	var fx := 28 * TILE_SIZE
 	var fy := (ROOM_H - 3) * TILE_SIZE
 
+	var flower_tex := preload("res://assets/art/items/flowersspread.png")
 	for i in 3:
 		var flower := Area2D.new()
 		flower.name = "Flower_%d" % i
@@ -503,19 +518,13 @@ func _build_stage3_flowers() -> void:
 		add_child(flower)
 		_flower_areas.append(flower)
 
-		var stem := ColorRect.new()
-		stem.size = Vector2(3, 16)
-		stem.position = Vector2(fx + i * 40 - 1.5, fy - 22)
-		stem.color = Color(0.15, 0.5, 0.1)
-		stem.z_index = 0
-		add_child(stem)
-
-		var petal := ColorRect.new()
-		petal.size = Vector2(10, 10)
-		petal.position = Vector2(fx + i * 40 - 5, fy - 32)
-		petal.color = Color(0.9, 0.2 + i * 0.2, 0.3 + i * 0.15)
-		petal.z_index = 1
-		add_child(petal)
+		var flower_sp := Sprite2D.new()
+		flower_sp.texture = flower_tex
+		flower_sp.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		flower_sp.scale = Vector2(1.2, 1.2)
+		flower_sp.position = Vector2(0, -10)
+		flower_sp.z_index = 1
+		flower.add_child(flower_sp)
 
 	var field_label := Label.new()
 	field_label.text = "[Flowers]"
@@ -1178,6 +1187,19 @@ func _show_stage_text(text: String, duration: float) -> void:
 	if _dialogue_box and _dialogue_box.get_parent():
 		_dialogue_box.queue_free()
 		_dialogue_box = null
+
+func _process(_delta: float) -> void:
+	if _parallax_layers.is_empty():
+		return
+	var cam := get_node_or_null("Camera2D") as Camera2D
+	if not cam:
+		return
+	var cx := cam.global_position.x
+	for l in _parallax_layers:
+		var offset := wrapf(-cx * l["factor"], 0, l["tex_w"])
+		var sprites := l["sprites"] as Array
+		for i in sprites.size():
+			sprites[i].position.x = offset + (i - 1) * l["tex_w"]
 
 func _physics_process(delta: float) -> void:
 	if not _can_move or not _player:

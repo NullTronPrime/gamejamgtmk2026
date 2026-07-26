@@ -432,19 +432,6 @@ func _on_load_completed(data: Dictionary) -> void:
 		_crossroad_enabled = data.get("crossroad_enabled", []).duplicate()
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.keycode == KEY_R and event.pressed and not event.echo:
-		if GridTrans.is_available() and not GridTrans.is_busy():
-			_test_spiral()
-	if event is InputEventKey and event.keycode == KEY_T and event.pressed and not event.echo:
-		if GridTrans.is_available() and not GridTrans.is_busy():
-			var game := get_node_or_null("/root/Game")
-			if game and game.has_method("enter_dungeon"):
-				game.enter_dungeon()
-	if event is InputEventKey and event.keycode == KEY_C and event.pressed and not event.echo:
-		if GridTrans.is_available() and not GridTrans.is_busy():
-			var game := get_node_or_null("/root/Game")
-			if game and game.has_method("enter_cave"):
-				game.enter_cave()
 	if event is InputEventKey and event.keycode == KEY_I and event.pressed and not event.echo:
 		var inv = get_node_or_null("/root/Game/InventoryLayer/InventoryUI")
 		if inv and inv.has_method("toggle"):
@@ -1514,6 +1501,15 @@ func _on_gravestone_exited(body: Node, idx: int) -> void:
 			if prompt:
 				prompt.visible = false
 
+func _show_prompt(text: String) -> void:
+	var l := Label.new(); l.text = text
+	l.add_theme_font_size_override("font_size", 14)
+	l.add_theme_color_override("font_color", Color(1, 1, 0.8))
+	l.position = Vector2(20, 20); l.z_index = 10; add_child(l)
+	var tw := create_tween()
+	tw.tween_property(l, "modulate:a", 0.0, 3.0).set_delay(2.5)
+	await tw.finished; l.queue_free()
+
 func _enter_room(room_idx: int) -> void:
 	var game := get_node_or_null("/root/Game")
 	if not game:
@@ -1526,6 +1522,8 @@ func _enter_room(room_idx: int) -> void:
 			ok = game.enter_library_room()
 		1:
 			ok = game.enter_hunting_grounds()
+		2:
+			ok = game.enter_dungeon()
 	if not ok and GridTrans.is_available() and not GridTrans.is_busy():
 		GridTrans.reveal(0.8)
 
@@ -1587,6 +1585,57 @@ func _setup_lighting() -> void:
 		add_child(_cool_light)
 
 	_setup_fireflies()
+
+var _graves_broken: Array[int] = []
+var _grave_parts_collected := 0
+const BROKEN_GRAVE_PARTS_TOTAL := 2
+
+func _grave_completed(idx: int) -> void:
+	if idx in _graves_broken:
+		return
+	_graves_broken.append(idx)
+	var area := get_node_or_null("Gravestone_%d" % idx) as Area2D
+	if not area:
+		return
+	for c in area.get_children():
+		if c is Sprite2D:
+			c.texture = preload("res://assets/art/items/brokengravepart.jpg")
+			c.scale = Vector2(0.5, 0.5)
+		if c is Label:
+			c.text = "[Broken]"
+	var pickup := Area2D.new()
+	pickup.name = "BrokenPart_%d" % idx
+	var ps := CollisionShape2D.new()
+	var pr := RectangleShape2D.new()
+	pr.size = Vector2(32, 32)
+	ps.shape = pr
+	pickup.add_child(ps)
+	pickup.position = area.position + Vector2(0, 40)
+	pickup.body_entered.connect(_on_broken_part_collected.bind(idx))
+	add_child(pickup)
+	var psp := Sprite2D.new()
+	psp.texture = preload("res://assets/art/items/brokengravepart.jpg")
+	psp.scale = Vector2(0.3, 0.3)
+	psp.z_index = 1
+	pickup.add_child(psp)
+
+func _on_broken_part_collected(body: Node, _idx: int) -> void:
+	if body != player_instance:
+		return
+	var pickup := get_node_or_null("BrokenPart_%d" % _idx)
+	if pickup:
+		pickup.queue_free()
+		_grave_parts_collected += 1
+		_show_prompt("Broken grave part collected (%d/%d)" % [_grave_parts_collected, BROKEN_GRAVE_PARTS_TOTAL])
+	if _grave_parts_collected >= BROKEN_GRAVE_PARTS_TOTAL:
+		_trigger_ending()
+
+func _trigger_ending() -> void:
+	_show_prompt("All graves are broken. The cycle ends...")
+	await get_tree().create_timer(2.0).timeout
+	var game := get_node_or_null("/root/Game")
+	if game and game.has_method("trigger_ending"):
+		game.trigger_ending()
 
 func _setup_fireflies() -> void:
 	_firefly_particles = GPUParticles2D.new()

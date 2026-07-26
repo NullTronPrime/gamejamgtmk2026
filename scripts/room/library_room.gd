@@ -187,6 +187,13 @@ func _build_interactables() -> void:
 	var bc := CollisionShape2D.new(); bc.shape = RectangleShape2D.new(); bc.shape.size = Vector2(48, 48)
 	ba.add_child(bc); ba.position = Vector2(9*TILE, 4*TILE)
 	ba.body_entered.connect(_on_near.bind("book")); add_child(ba)
+	var scroll_sp := Sprite2D.new()
+	scroll_sp.texture = preload("res://assets/art/rooms/scroll.png")
+	scroll_sp.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	scroll_sp.scale = Vector2(1.5, 1.5)
+	scroll_sp.position = Vector2(9*TILE, 4*TILE - 4)
+	scroll_sp.z_index = 1
+	add_child(scroll_sp)
 
 	var ma := Area2D.new(); ma.name = "MeatArea"
 	var mc := CollisionShape2D.new(); mc.shape = RectangleShape2D.new(); mc.shape.size = Vector2(48, 40)
