@@ -1,7 +1,7 @@
 extends Node2D
 
 const GridTrans := preload("res://scripts/ui/grid_transition.gd")
-const HumanoidRig := preload("res://scripts/shared/humanoid_rig.gd")
+
 const GRAVITY := 1400.0; const JUMP_VEL := -480.0; const MOVE_SPEED := 180.0
 const SPRINT_SPEED_BONUS := 0.5; const TILE := 64; const FLOOR_Y := 12 * TILE
 const ROOM_LEFT := -8 * TILE; const ROOM_RIGHT := 84 * TILE
@@ -12,8 +12,6 @@ var _can_move := false; var _exiting := false; var _stage_hint: Label
 var _has_key := false; var _has_book := false; var _has_meat := false; var _has_potion := false
 var _lion_done := false; var _potion_used := false
 var _bone_bodies: Array[RigidBody2D] = []
-var _rig: Dictionary = {}
-var _walk_time := 0.0
 
 var _fountain_frames: Array[Texture2D] = []
 var _fountain_sprite: Sprite2D
@@ -142,12 +140,17 @@ func _make_bone_pickup(item_id: String, tex_path: String, pos: Vector2, idx: int
 	add_child(body)
 
 func _build_pickups() -> void:
-	var rng = RandomNumberGenerator.new()
-	rng.randomize()
+	var bone_positions: Array[Vector2] = [
+		Vector2(12 * TILE, FLOOR_Y - 3 * TILE),
+		Vector2(28 * TILE, FLOOR_Y - 4 * TILE),
+		Vector2(42 * TILE, FLOOR_Y - 2 * TILE),
+		Vector2(55 * TILE, FLOOR_Y - 3 * TILE),
+		Vector2(68 * TILE, FLOOR_Y - 4 * TILE),
+		Vector2(20 * TILE, FLOOR_Y - 5 * TILE),
+	]
+	bone_positions.shuffle()
 	for i in 6:
-		var rx = rng.randf_range(3.0, 75.0) * TILE
-		var ry = rng.randf_range(FLOOR_Y - 5.0 * TILE, FLOOR_Y - 1.5 * TILE)
-		_make_bone_pickup(SKELETON_ITEMS[i], "res://assets/art/skeleton/%s.png" % GROUND_FILES[i], Vector2(rx, ry), i)
+		_make_bone_pickup(SKELETON_ITEMS[i], "res://assets/art/skeleton/%s.png" % GROUND_FILES[i], bone_positions[i], i)
 
 func _build_interactables() -> void:
 	var fx: int = 39 * TILE
@@ -238,8 +241,23 @@ func _spawn_player() -> void:
 	_player.collision_layer = 1; _player.collision_mask = 1
 	var shape := RectangleShape2D.new(); shape.size = Vector2(28, 88)
 	var col := CollisionShape2D.new(); col.shape = shape; col.position = Vector2(0, 12); _player.add_child(col)
-	_rig = HumanoidRig.build(_player, Color(0.55,0.4,0.25), Color(0.8,0.65,0.5))
-	for c in _player.get_children(): if c is Polygon2D: c.z_index = 1
+	var tex := load("res://assets/sprites/player/charactertilesheet.png")
+	if tex:
+		var sf := SpriteFrames.new()
+		sf.add_animation("walk")
+		sf.set_animation_speed("walk", 8.0)
+		sf.set_animation_loop("walk", true)
+		for i in 4:
+			var at := AtlasTexture.new()
+			at.atlas = tex
+			at.region = Rect2(0, i * 80, 40, 80)
+			sf.add_frame("walk", at)
+		var spr := AnimatedSprite2D.new()
+		spr.sprite_frames = sf
+		spr.play("walk")
+		spr.centered = true
+		spr.z_index = 1
+		_player.add_child(spr)
 	_player.position = Vector2(2*TILE, FLOOR_Y - 3*TILE); add_child(_player)
 
 func _setup_camera() -> void:
@@ -296,7 +314,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if _can_move and _near_interact.get("pedestal", false):
 			if not _lion_done:
 				_place_on_pedestal()
-			elif _lion_done and _has_potion and not _potion_used:
+			elif _lion_done and (_has_potion or GameInventory.has_item("life_potion")) and not _potion_used:
 				_use_potion_on_skeleton()
 			elif _lion_done and not _has_potion and not _potion_used:
 				_show_prompt("You need the Potion of Life from the fountain.")
@@ -361,6 +379,14 @@ func _get_part_name(i: int) -> String:
 	var names := ["Neck","Skull","Arms","Ribs","Legs","Tail"]
 	return names[i] if i < names.size() else "Part"
 
+func _play_voice(path: String) -> void:
+	var s := AudioStreamPlayer.new()
+	s.stream = load(path)
+	if s.stream:
+		add_child(s)
+		s.finished.connect(s.queue_free)
+		s.play()
+
 func _show_vn_dialogue(title: String, text: String, duration: float) -> void:
 	var vs := DisplayServer.window_get_size()
 	var vn_layer := CanvasLayer.new()
@@ -368,24 +394,25 @@ func _show_vn_dialogue(title: String, text: String, duration: float) -> void:
 	vn_layer.name = "VNDialogue"
 	add_child(vn_layer)
 	var vn_box := ColorRect.new()
-	vn_box.color = Color(0.05, 0.05, 0.1, 0.9)
-	vn_box.position = Vector2(20, vs.y - 220)
-	vn_box.size = Vector2(vs.x - 40, 200)
+	vn_box.color = Color(0.05, 0.05, 0.1, 0.92)
+	vn_box.position = Vector2(10, vs.y - 260)
+	vn_box.size = Vector2(vs.x - 20, 250)
 	vn_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vn_layer.add_child(vn_box)
 	var vn_name := Label.new()
 	vn_name.text = title
-	vn_name.add_theme_font_size_override("font_size", 20)
+	vn_name.add_theme_font_size_override("font_size", 22)
 	vn_name.add_theme_color_override("font_color", Color(0.6, 0.7, 1, 1))
-	vn_name.position = Vector2(40, vs.y - 210)
+	vn_name.position = Vector2(30, vs.y - 248)
+	vn_name.size = Vector2(vs.x - 60, 30)
 	vn_name.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vn_layer.add_child(vn_name)
 	var vn_text := Label.new()
 	vn_text.text = text
-	vn_text.add_theme_font_size_override("font_size", 16)
+	vn_text.add_theme_font_size_override("font_size", 18)
 	vn_text.add_theme_color_override("font_color", Color(0.9, 0.9, 0.85, 1))
-	vn_text.position = Vector2(40, vs.y - 180)
-	vn_text.size = Vector2(vs.x - 80, 150)
+	vn_text.position = Vector2(30, vs.y - 210)
+	vn_text.size = Vector2(vs.x - 60, 180)
 	vn_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	vn_text.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vn_layer.add_child(vn_text)
@@ -396,6 +423,7 @@ func _finish_assembly() -> void:
 	_lion_done = true
 	_can_move = false
 	_stage_hint.text = ""
+	_play_voice("res://assets/audio/sfx/completedthebeast.mp3")
 	await _show_vn_dialogue("???",
 		"I see... You have completed the Beast. Now Only One thing remains...", 4.0)
 	_stage_hint.text = "The lion skeleton assembles before you. It seems to be waiting for something... The fountain shimmers. Get the Potion of Life."
@@ -410,10 +438,11 @@ func _set_fountain_bottle_visible(vis: bool) -> void:
 func _trigger_potion() -> void:
 	if _has_potion: return
 	_has_potion = true
+	GameInventory.add_item("life_potion")
 	var bottle := get_node_or_null("FountainBottle") as Sprite2D
 	if bottle:
 		_set_fountain_bottle_visible(false)
-	_stage_hint.text = "You hold the shimmering Potion of Life. The guardian skeleton awaits..."
+	_stage_hint.text = "The Potion of Life shimmers in your hands. The pedestal awaits..."
 	var popup := ColorRect.new()
 	popup.color = Color(0.0, 0.3, 0.0, 0.6)
 	popup.position = Vector2(300, 300)
@@ -429,6 +458,88 @@ func _trigger_potion() -> void:
 	popup_label.z_index = 61; add_child(popup_label)
 	await get_tree().create_timer(1.5).timeout
 	popup.queue_free(); popup_label.queue_free()
+
+func _show_countdown_timer() -> void:
+	var cl := CanvasLayer.new(); cl.layer = 30; cl.name = "CountdownLayer"; add_child(cl)
+	var bg := ColorRect.new()
+	bg.color = Color(0, 0, 0, 0.7)
+	bg.size = DisplayServer.window_get_size()
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cl.add_child(bg)
+	var label := Label.new()
+	label.add_theme_font_size_override("font_size", 64)
+	label.add_theme_color_override("font_color", Color(1, 0.8, 0.2, 1))
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.position = Vector2(0, 0)
+	label.size = DisplayServer.window_get_size()
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cl.add_child(label)
+	var tick_start: float = 0.12; var tick_end: float = 0.04
+	for i in range(40, 0, -1):
+		label.text = str(i)
+		label.scale = Vector2(1.3, 1.3)
+		var tw := create_tween()
+		tw.tween_property(label, "scale", Vector2(1, 1), 0.15).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_BACK)
+		var t: float = float(40 - i) / 39.0
+		var wait: float = lerp(tick_start, tick_end, t)
+		await get_tree().create_timer(wait).timeout
+	cl.queue_free()
+
+func _show_ending_cutscene() -> void:
+	var cl := CanvasLayer.new(); cl.layer = 30; cl.name = "EndingCutscene"; add_child(cl)
+	var bg := ColorRect.new()
+	bg.color = Color.BLACK
+	bg.size = DisplayServer.window_get_size()
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cl.add_child(bg)
+	var tr := TextureRect.new()
+	tr.texture = preload("res://assets/art/cutscenes/cutscene_4.png")
+	tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	tr.size = DisplayServer.window_get_size()
+	tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cl.add_child(tr)
+	var txt_bg := ColorRect.new()
+	txt_bg.color = Color(0, 0, 0, 0.6)
+	txt_bg.size = Vector2(DisplayServer.window_get_size().x, 100)
+	txt_bg.position = Vector2(0, DisplayServer.window_get_size().y - 100)
+	txt_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cl.add_child(txt_bg)
+	var lb := Label.new()
+	lb.text = "As Vikram breaks the deal, Betaal flies right back to the tree he came from"
+	lb.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lb.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	lb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lb.add_theme_font_size_override("font_size", 20)
+	lb.add_theme_color_override("font_color", Color(1, 1, 0.9))
+	lb.size = Vector2(DisplayServer.window_get_size().x - 40, 90)
+	lb.position = Vector2(20, DisplayServer.window_get_size().y - 95)
+	lb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cl.add_child(lb)
+	await get_tree().create_timer(4.0).timeout
+	cl.queue_free()
+
+func _show_credits() -> void:
+	var cl := CanvasLayer.new(); cl.layer = 35; cl.name = "CreditsLayer"; add_child(cl)
+	var bg := ColorRect.new()
+	bg.color = Color(0, 0, 0, 1)
+	bg.size = DisplayServer.window_get_size()
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cl.add_child(bg)
+	var label := Label.new()
+	label.text = "This Game was our team's unique spin on the Indian Classical folktale of \"Vikram & Betaal\". This version was made in 4 days."
+	label.add_theme_font_size_override("font_size", 18)
+	label.add_theme_color_override("font_color", Color(1, 1, 1, 1))
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.position = Vector2(60, 200)
+	label.size = Vector2(DisplayServer.window_get_size().x - 120, 300)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cl.add_child(label)
+	await get_tree().create_timer(5.0).timeout
+	cl.queue_free()
 
 func _use_potion_on_skeleton() -> void:
 	_potion_used = true
@@ -456,46 +567,25 @@ func _use_potion_on_skeleton() -> void:
 	await tw_fade.finished
 	potion_spr.queue_free()
 
-	await _show_vn_dialogue("Vikram",
-		"No Betaal, I am not going to fall for your tricks. I know that using this potion will awaken the beast", 3.0)
-	await _show_vn_dialogue("Betaal",
-		"Indeed Mighty Rajan, Wisdom has finally blessed you. But in doing so, YOU have spoken up, breaking our deal. Well then, Off I Go!", 4.0)
-
-	var glimmer_particles := GPUParticles2D.new()
-	glimmer_particles.position = Vector2(31 * TILE, FLOOR_Y - 180)
-	glimmer_particles.z_index = 15
-	glimmer_particles.amount = 40
-	glimmer_particles.lifetime = 3.0
-	glimmer_particles.explosiveness = 0.5
-	glimmer_particles.one_shot = true
-	var pmat := ParticleProcessMaterial.new()
-	pmat.direction = Vector3(0, -1, 0)
-	pmat.spread = 180.0
-	pmat.initial_velocity_min = 20.0
-	pmat.initial_velocity_max = 80.0
-	pmat.gravity = Vector3(0, -20, 0)
-	pmat.scale_min = 0.2
-	pmat.scale_max = 0.5
-	pmat.color = Color(1.0, 0.9, 0.6, 0.8)
-	glimmer_particles.process_material = pmat
-	glimmer_particles.emitting = true
-	add_child(glimmer_particles)
-
-	var flash := ColorRect.new()
-	flash.color = Color(1, 1, 1, 0)
-	flash.size = DisplayServer.window_get_size()
-	flash.z_index = 100; add_child(flash)
-	var tw := create_tween()
-	tw.tween_property(flash, "color", Color(1, 1, 1, 0.5), 0.8)
-	tw.tween_property(flash, "color", Color(1, 1, 1, 0), 1.5).set_delay(0.8)
+	await _show_countdown_timer()
+	await _show_vn_dialogue("Betaal", "Everything has a price, Mighty Rajan.", 3.0)
+	_play_voice("res://assets/audio/sfx/knowledgeisacuriousgift.mp3")
+	await _show_vn_dialogue("Betaal", "Knowledge... is a curious gift, Might Rajan. It teaches us how something may be done... but not whether it should.", 4.0)
+	await get_tree().create_timer(0.5).timeout
+	_play_voice("res://assets/audio/sfx/Vikram Refuse.mp3")
+	await _show_vn_dialogue("Vikram", "No Betaal, I am not going to fall for your tricks. I know that using this potion will awaken the beast", 4.0)
+	await get_tree().create_timer(0.5).timeout
+	await _show_vn_dialogue("Betaal", "Indeed Mighty Rajan, Wisdom has finally blessed you. But in doing so, YOU have spoken up, breaking our deal", 3.5)
+	await get_tree().create_timer(0.3).timeout
+	_play_voice("res://assets/audio/sfx/wellthenoffigo.mp3")
+	await _show_vn_dialogue("Betaal", "Well then, Off I Go!", 2.5)
 
 	if _bgm: _bgm.stop()
-	_stage_hint.text = "The lion skeleton bows. The path is open."
-	await get_tree().create_timer(3.0).timeout
-	glimmer_particles.queue_free()
-	flash.queue_free()
-	await get_tree().create_timer(0.5).timeout
-	_exit_to_gravestone()
+	await _show_ending_cutscene()
+	await _show_credits()
+	var g := get_node_or_null("/root/Game")
+	if g and g.has_method("return_to_title"): g.return_to_title()
+	else: queue_free()
 
 func _exit_room() -> void:
 	if _exiting: return; _exiting = true; _can_move = false
@@ -541,21 +631,8 @@ func _physics_process(delta: float) -> void:
 	var sprint_pressed = Input.is_key_pressed(KEY_SHIFT) or Input.is_action_pressed("sprint")
 	var speed = MOVE_SPEED * (1.0 + SPRINT_SPEED_BONUS) if sprint_pressed and dir != 0 else MOVE_SPEED
 	_player.velocity.x = dir * speed; _player.velocity.y += GRAVITY * delta
-	if abs(dir) > 0.1 and _player.is_on_floor():
-		_walk_time += delta * 8.0
-		var s := sin(_walk_time); var c := cos(_walk_time)
-		if _rig.has("l_shoulder"): _rig.l_shoulder.rotation = s * 0.3
-		if _rig.has("r_shoulder"): _rig.r_shoulder.rotation = -s * 0.3
-		if _rig.has("l_elbow"): _rig.l_elbow.rotation = abs(s) * 0.15
-		if _rig.has("r_elbow"): _rig.r_elbow.rotation = abs(s) * 0.15
-		if _rig.has("l_hip"): _rig.l_hip.rotation = c * 0.25
-		if _rig.has("r_hip"): _rig.r_hip.rotation = -c * 0.25
-		if _rig.has("l_knee"): _rig.l_knee.rotation = max(0, -c) * 0.15
-		if _rig.has("r_knee"): _rig.r_knee.rotation = max(0, c) * 0.15
-	elif _rig.size() > 0:
-		_walk_time = 0.0
-		for key in ["l_shoulder","r_shoulder","l_elbow","r_elbow","l_hip","r_hip","l_knee","r_knee"]:
-			if _rig.has(key): _rig[key].rotation = 0.0
+	if abs(dir) > 0.1:
+		_player.scale.x = sign(dir) * abs(_player.scale.x)
 	_player.move_and_slide()
 	var cam := get_node_or_null("Camera2D") as Camera2D
 	if cam: cam.position = _player.position

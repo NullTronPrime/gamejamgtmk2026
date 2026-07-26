@@ -41,30 +41,33 @@ var _punch_start := -1.0
 var _punch_dir := Vector2.RIGHT
 
 @onready var visual: Node2D = $Visual
-@onready var betaal: Node2D = $Visual/BetaalPosition/Betaal
 @onready var collision: CollisionShape2D = $CollisionShape2D
-
-# ---- rig / walk-cycle state ----
-var _rig: Dictionary = {}
-var _walk_phase: float = 0.0
-var _walk_blend: float = 0.0
-const WALK_SWING_DEG: float = 32.0
-const WALK_CYCLE_SPEED: float = 9.0
 
 func _ready() -> void:
 	GameManager.state_changed.connect(_on_game_state_changed)
 	GameInventory.selected_changed.connect(_on_selected_changed)
-	$Visual/BetaalPosition.position = Vector2(0, 0)
 	_shadow = _create_player_shadow()
 	add_child(_shadow)
 	if not GameInventory.selected_item.is_empty():
 		_update_held_item()
 
-	# Neutral "placeholder" stick-figure body for Vikram (Betaal, the one being
-	# carried, is the blue figure - see betaal.gd).
-	_rig = HumanoidRig.build(visual, Color(0.78, 0.78, 0.8), Color(0.85, 0.7, 0.55))
-	for p in _rig["polygons"]:
-		_make_lit(p)
+	var tex := load("res://assets/sprites/player/charactertilesheet.png")
+	if tex:
+		var sf := SpriteFrames.new()
+		sf.add_animation("walk")
+		sf.set_animation_speed("walk", 8.0)
+		sf.set_animation_loop("walk", true)
+		for i in 4:
+			var at := AtlasTexture.new()
+			at.atlas = tex
+			at.region = Rect2(0, i * 80, 40, 80)
+			sf.add_frame("walk", at)
+		var spr := AnimatedSprite2D.new()
+		spr.sprite_frames = sf
+		spr.play("walk")
+		spr.centered = true
+		spr.z_index = 1
+		visual.add_child(spr)
 
 	for i in 4:
 		var s = load("res://assets/audio/sfx/footstep/forestfs%d.wav" % (i + 1))
@@ -92,7 +95,6 @@ func _physics_process(delta: float) -> void:
 		velocity.x = move_toward(velocity.x, 0.0, friction * delta)
 		velocity.y = move_toward(velocity.y, 0.0, friction * delta)
 		move_and_slide()
-		_animate_rig(delta, false, on_ground)
 		return
 
 	var h_dir := Input.get_axis("move_left", "move_right")
@@ -136,8 +138,6 @@ func _physics_process(delta: float) -> void:
 
 	var is_moving = h_dir != 0
 	var is_running = (wants_to_sprint or speed_multiplier > 1.0) and not _is_crouching
-	_animate_rig(delta, is_moving, on_ground, is_running)
-
 	_update_held_item_position()
 	if _is_punching and Time.get_ticks_msec() / 1000.0 - _punch_start > 0.15:
 		_is_punching = false
@@ -275,86 +275,6 @@ func _make_lit(item: CanvasItem) -> void:
 	var mat = ShaderMaterial.new()
 	mat.shader = shader
 	item.material = mat
-
-func _animate_rig(delta: float, is_moving: bool, on_ground: bool, is_running: bool = false) -> void:
-	if _rig.is_empty():
-		return
-
-	if _is_crouching:
-		var crouch_factor = 1.0 - collision.shape.size.y / _normal_collision_height
-		var tuck = deg_to_rad(45.0 * crouch_factor)
-		_rig["l_hip"].rotation = lerp(_rig["l_hip"].rotation, tuck, delta * 12.0)
-		_rig["r_hip"].rotation = lerp(_rig["r_hip"].rotation, tuck, delta * 12.0)
-		_rig["l_knee"].rotation = lerp(_rig["l_knee"].rotation, deg_to_rad(60.0 * crouch_factor), delta * 12.0)
-		_rig["r_knee"].rotation = lerp(_rig["r_knee"].rotation, deg_to_rad(60.0 * crouch_factor), delta * 12.0)
-		_rig["torso"].rotation = lerp(_rig["torso"].rotation, deg_to_rad(10.0 * crouch_factor), delta * 12.0)
-		_rig["head"].rotation = lerp(_rig["head"].rotation, deg_to_rad(-5.0 * crouch_factor), delta * 12.0)
-		if is_moving:
-			_walk_phase += delta * WALK_CYCLE_SPEED * 0.5
-			var c_swing = sin(_walk_phase) * deg_to_rad(15.0 * crouch_factor)
-			_rig["l_shoulder"].rotation = -c_swing
-			_rig["r_shoulder"].rotation = c_swing
-		return
-
-	if _is_punching:
-		var now: float = Time.get_ticks_msec() / 1000.0
-		var elapsed: float = now - _punch_start
-		if elapsed < 0.15:
-			var p: float = min(elapsed / 0.1, 1.0)
-			var f: float = signf(visual.scale.x)
-			var forward := Vector2(f, 0)
-			var rel_angle := forward.angle_to(_punch_dir) if _punch_dir.length_squared() > 0 else 0.0
-			_rig["torso"].rotation = -0.15 * f * p + clamp(rel_angle * 0.2, -0.3, 0.3) * p
-			var s_key: String = "l_shoulder" if f > 0 else "r_shoulder"
-			var e_key: String = "l_elbow" if f > 0 else "r_elbow"
-			_rig[s_key].rotation = 0.8 * p * f
-			_rig[e_key].rotation = -0.3 * p
-		return
-
-	var target_blend = 1.0 if (is_moving and on_ground) else 0.0
-	_walk_blend = move_toward(_walk_blend, target_blend, delta * 6.0)
-
-	if is_moving and on_ground:
-		_walk_phase += delta * WALK_CYCLE_SPEED * (1.4 if is_running else 1.0)
-
-	var swing = sin(_walk_phase) * deg_to_rad(WALK_SWING_DEG) * _walk_blend
-	var lift_l = max(0.0, -sin(_walk_phase)) * deg_to_rad(40.0) * _walk_blend
-	var lift_r = max(0.0, sin(_walk_phase)) * deg_to_rad(40.0) * _walk_blend
-
-	_rig["l_hip"].rotation = swing
-	_rig["r_hip"].rotation = -swing
-	_rig["l_knee"].rotation = lift_l
-	_rig["r_knee"].rotation = lift_r
-
-	_rig["l_shoulder"].rotation = -swing * 0.6
-	_rig["r_shoulder"].rotation = swing * 0.6
-	_rig["l_elbow"].rotation = abs(swing) * 0.25
-	_rig["r_elbow"].rotation = abs(swing) * 0.25
-
-	if not on_ground:
-		var tuck = deg_to_rad(18.0)
-		_rig["l_hip"].rotation = lerp(_rig["l_hip"].rotation, tuck, delta * 10.0)
-		_rig["r_hip"].rotation = lerp(_rig["r_hip"].rotation, tuck, delta * 10.0)
-		_rig["l_knee"].rotation = lerp(_rig["l_knee"].rotation, deg_to_rad(35.0), delta * 10.0)
-		_rig["r_knee"].rotation = lerp(_rig["r_knee"].rotation, deg_to_rad(35.0), delta * 10.0)
-		var shoulder_swing := deg_to_rad(40.0) if vertical_vel < 0 else deg_to_rad(15.0)
-		_rig["l_shoulder"].rotation = lerp(_rig["l_shoulder"].rotation, -shoulder_swing, delta * 8.0)
-		_rig["r_shoulder"].rotation = lerp(_rig["r_shoulder"].rotation, shoulder_swing, delta * 8.0)
-
-	if on_ground and _land_time > 0.0 and Time.get_ticks_msec() / 1000.0 - _land_time < 0.15:
-		var land_factor: float = (Time.get_ticks_msec() / 1000.0 - _land_time) / 0.15
-		var squat: float = lerp(0.4, 0.0, land_factor)
-		_rig["l_knee"].rotation = lerp(_rig["l_knee"].rotation, squat, delta * 15.0)
-		_rig["r_knee"].rotation = lerp(_rig["r_knee"].rotation, squat, delta * 15.0)
-		_rig["torso"].rotation = lerp(_rig["torso"].rotation, -squat * 0.3, delta * 15.0)
-
-	if _walk_blend < 0.05:
-		var bob = sin(Time.get_ticks_msec() / 1000.0 * 1.6) * 0.5
-		_rig["torso"].position.y = bob
-		_rig["head"].position.y = bob
-	else:
-		_rig["torso"].position.y = 0.0
-		_rig["head"].position.y = 0.0
 
 func _set_collision_height(h: float) -> void:
 	if _crouch_tween and _crouch_tween.is_valid():

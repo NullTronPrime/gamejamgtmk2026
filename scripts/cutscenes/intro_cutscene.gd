@@ -9,6 +9,12 @@ const IMAGES := [
 	preload("res://assets/art/cutscenes/cutscene_1.png"),
 ]
 
+const TEXTS := [
+	"Once upon a time, The Great Ruler Vikramaditya had a glorious empire",
+	"One day, A Sage requested him to head into the depths of the forest and bring a demon known as Betaal for a ritual for the safety of the Kingdom",
+	"King Vikram, fearless as he is, treads down the forest and meets Betaal, carrying him back to the Empire",
+]
+
 @onready var skip_button: Button = $SkipButton
 @onready var continue_button: Button = $ContinueButton
 
@@ -41,6 +47,27 @@ func _ready() -> void:
 		tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		add_child(tr)
 		_slides.append(tr)
+
+		var txt_bg := ColorRect.new()
+		txt_bg.color = Color(0, 0, 0, 0.6)
+		txt_bg.size = Vector2(_vs.x, 100)
+		txt_bg.position = Vector2(0, _vs.y - 100)
+		txt_bg.z_index = 2
+		txt_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		tr.add_child(txt_bg)
+
+		var lb := Label.new()
+		lb.text = TEXTS[i]
+		lb.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lb.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		lb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		lb.add_theme_font_size_override("font_size", 20)
+		lb.add_theme_color_override("font_color", Color(1, 1, 0.9))
+		lb.size = Vector2(_vs.x - 40, 90)
+		lb.position = Vector2(20, _vs.y - 95)
+		lb.z_index = 3
+		lb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		tr.add_child(lb)
 
 	_slides[0].position = Vector2.ZERO
 	_slides[0].z_index = 3

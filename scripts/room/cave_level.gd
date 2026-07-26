@@ -1,7 +1,6 @@
 extends Node2D
 
 const GridTrans := preload("res://scripts/ui/grid_transition.gd")
-const HumanoidRig := preload("res://scripts/shared/humanoid_rig.gd")
 
 const TILE_SIZE := 64
 const ROOM_W := 20
@@ -522,10 +521,23 @@ func _spawn_player() -> void:
 	col.position = Vector2(0, 12)
 	_player.add_child(col)
 
-	HumanoidRig.build(_player, Color(0.55, 0.4, 0.25), Color(0.8, 0.65, 0.5))
-	for c in _player.get_children():
-		if c is Polygon2D:
-			c.z_index = 1
+	var tex := load("res://assets/sprites/player/charactertilesheet.png")
+	if tex:
+		var sf := SpriteFrames.new()
+		sf.add_animation("walk")
+		sf.set_animation_speed("walk", 8.0)
+		sf.set_animation_loop("walk", true)
+		for i in 4:
+			var at := AtlasTexture.new()
+			at.atlas = tex
+			at.region = Rect2(0, i * 80, 40, 80)
+			sf.add_frame("walk", at)
+		var spr := AnimatedSprite2D.new()
+		spr.sprite_frames = sf
+		spr.play("walk")
+		spr.centered = true
+		spr.z_index = 1
+		_player.add_child(spr)
 
 	_player.position = Vector2(_player_spawn.x * TILE_SIZE, _player_spawn.y * TILE_SIZE)
 	add_child(_player)
@@ -568,6 +580,7 @@ func _physics_process(delta: float) -> void:
 	var dir := Input.get_axis(&"move_left", &"move_right")
 	if dir != 0:
 		_last_facing = signf(dir)
+		_player.scale.x = sign(dir) * abs(_player.scale.x)
 	var on_floor := _player.is_on_floor()
 	var vert := Input.get_axis(&"move_up", &"move_down")
 
@@ -584,7 +597,6 @@ func _physics_process(delta: float) -> void:
 		_player.velocity.y = climb_dir * CLIMB_SPEED
 		_player.move_and_slide()
 		_push_rigid_bodies()
-		_update_rig_animation(dir, on_floor, true)
 	else:
 		var jump := Input.is_action_just_pressed(&"jump") and on_floor
 
@@ -609,7 +621,6 @@ func _physics_process(delta: float) -> void:
 
 		_player.move_and_slide()
 		_push_rigid_bodies()
-		_update_rig_animation(dir, on_floor, false)
 
 	var cam := get_node_or_null("Camera2D") as Camera2D
 	if cam:
@@ -631,143 +642,6 @@ func _push_rigid_bodies() -> void:
 			var force_mult: float = 2.0 + body.mass * 0.5
 			body.apply_central_force(push_dir * PUSH_FORCE * speed_ratio * force_mult)
 			body.apply_torque(push_dir.x * 800.0 * speed_ratio)
-
-func _update_rig_animation(dir: float, on_floor: bool, climbing: bool) -> void:
-	var t := Time.get_ticks_msec() / 1000.0 * 2.0
-
-	if climbing:
-		var phase := t * 3.5
-		var r_up := sin(phase)
-		var l_up := sin(phase + PI)
-
-		var r_shoulder := _get_rig_part("RShoulder")
-		var l_shoulder := _get_rig_part("LShoulder")
-		if r_shoulder: r_shoulder.rotation = -0.85 + (r_up + 1.0) * 0.5 * 0.65
-		if l_shoulder: l_shoulder.rotation = 0.85 - (l_up + 1.0) * 0.5 * 0.65
-
-		var r_elbow := _get_rig_part("RElbow")
-		var l_elbow := _get_rig_part("LElbow")
-		if r_elbow:
-			r_elbow.position = Vector2(0, 16)
-			r_elbow.rotation = 0.2 + (r_up + 1.0) * 0.5 * 0.5
-		if l_elbow:
-			l_elbow.position = Vector2(0, 16)
-			l_elbow.rotation = 0.2 + (l_up + 1.0) * 0.5 * 0.5
-
-		var r_hip := _get_rig_part("RHip")
-		var l_hip := _get_rig_part("LHip")
-		var r_knee := _get_rig_part("RKnee")
-		var l_knee := _get_rig_part("LKnee")
-		if r_hip: r_hip.rotation = 0
-		if l_hip: l_hip.rotation = 0
-		if r_knee: r_knee.rotation = lerp(0.0, 0.5, (1.0 + l_up) * 0.5)
-		if l_knee: l_knee.rotation = lerp(0.0, 0.5, (1.0 + r_up) * 0.5)
-
-		var torso := _get_rig_part("Torso")
-		if torso: torso.rotation = -0.1 + sin(phase) * 0.04
-		return
-
-	if not on_floor:
-		for c in _player.get_children():
-			if c is Polygon2D:
-				c.rotation = 0
-			if c is Node2D and c.name in ["RShoulder", "LShoulder", "RHip", "LHip"]:
-				c.rotation = 0
-		var torso := _get_rig_part("Torso")
-		if torso: torso.rotation = 0.15 if _player.velocity.y < 0 else -0.1
-		var l_shoulder := _get_rig_part("LShoulder")
-		var r_shoulder := _get_rig_part("RShoulder")
-		if _player.velocity.y < 0:
-			if l_shoulder: l_shoulder.rotation = -0.6
-			if r_shoulder: r_shoulder.rotation = 0.6
-		else:
-			if l_shoulder: l_shoulder.rotation = -0.2
-			if r_shoulder: r_shoulder.rotation = 0.2
-		return
-
-	var now := Time.get_ticks_msec() / 1000.0
-
-	if _land_time > 0.0 and now - _land_time < 0.15:
-		var land_factor: float = (now - _land_time) / 0.15
-		var squat: float = lerp(0.4, 0.0, land_factor)
-		var l_knee := _get_rig_part("LKnee")
-		var r_knee := _get_rig_part("RKnee")
-		if l_knee: l_knee.rotation = squat
-		if r_knee: r_knee.rotation = squat
-		var torso := _get_rig_part("Torso")
-		if torso: torso.rotation = -squat * 0.3
-		var r_hip := _get_rig_part("RHip")
-		var l_hip := _get_rig_part("LHip")
-		if l_hip: l_hip.rotation = -squat * 0.1
-		if r_hip: r_hip.rotation = squat * 0.1
-		return
-
-	if _is_punching:
-		var punch_now: float = Time.get_ticks_msec() / 1000.0
-		var elapsed: float = punch_now - _punch_start
-		if elapsed < 0.15:
-			var p: float = min(elapsed / 0.1, 1.0)
-			var f: float = _last_facing
-			var torso: Node2D = _get_rig_part("Torso")
-			if torso:
-				var forward := Vector2(f, 0)
-				var rel_angle := forward.angle_to(_punch_dir) if _punch_dir.length_squared() > 0 else 0.0
-				torso.rotation = -0.15 * f * p + clamp(rel_angle * 0.2, -0.3, 0.3) * p
-			var closer_s: Node2D
-			var closer_e: Node2D
-			if f > 0:
-				closer_s = _get_rig_part("LShoulder")
-				closer_e = _get_rig_part("LElbow")
-			else:
-				closer_s = _get_rig_part("RShoulder")
-				closer_e = _get_rig_part("RElbow")
-			if closer_s: closer_s.rotation = 0.8 * p * f
-			if closer_e: closer_e.rotation = -0.3 * p
-		return
-
-	if _is_pushing:
-		var facing := signf(dir)
-		var torso := _get_rig_part("Torso")
-		if torso: torso.rotation = -0.2 * facing
-		var l_shoulder := _get_rig_part("LShoulder")
-		var r_shoulder := _get_rig_part("RShoulder")
-		if l_shoulder: l_shoulder.rotation = 0.7 * facing
-		if r_shoulder: r_shoulder.rotation = -0.7 * facing
-		var l_elbow := _get_rig_part("LElbow")
-		var r_elbow := _get_rig_part("RElbow")
-		if l_elbow: l_elbow.rotation = -0.1
-		if r_elbow: r_elbow.rotation = 0.1
-		var l_knee := _get_rig_part("LKnee")
-		var r_knee := _get_rig_part("RKnee")
-		if l_knee: l_knee.rotation = 0.25
-		if r_knee: r_knee.rotation = 0.25
-		var l_hip := _get_rig_part("LHip")
-		var r_hip := _get_rig_part("RHip")
-		if l_hip: l_hip.rotation = 0.1 * facing
-		if r_hip: r_hip.rotation = -0.1 * facing
-		return
-
-	if abs(dir) < 0.1:
-		var bob := sin(t * 1.5) * 0.02
-		var torso := _get_rig_part("Torso")
-		if torso: torso.rotation = bob
-		return
-
-	var phase := t * 4.0 * signf(dir)
-	var swing := sin(phase) * 0.5
-
-	var r_shoulder := _get_rig_part("RShoulder")
-	var l_shoulder := _get_rig_part("LShoulder")
-	var r_hip := _get_rig_part("RHip")
-	var l_hip := _get_rig_part("LHip")
-
-	if r_shoulder: r_shoulder.rotation = swing * 0.6
-	if l_shoulder: l_shoulder.rotation = -swing * 0.6
-	if r_hip: r_hip.rotation = -swing * 0.4
-	if l_hip: l_hip.rotation = swing * 0.4
-
-	var torso := _get_rig_part("Torso")
-	if torso: torso.rotation = -swing * 0.1
 
 func _on_selected_changed(_item_id: String) -> void:
 	_update_held_item()
@@ -860,19 +734,6 @@ func _do_punch() -> void:
 		if body is RigidBody2D:
 			body.apply_central_force(_punch_dir * 500.0)
 			body.apply_torque(_punch_dir.x * 300.0)
-
-func _get_rig_part(part_name: String) -> Node2D:
-	return _find_node_recursive(_player, part_name)
-
-func _find_node_recursive(parent: Node, name: String) -> Node2D:
-	for c in parent.get_children():
-		if c is Node2D and c.name == name:
-			return c
-		if c.get_child_count() > 0:
-			var found := _find_node_recursive(c, name)
-			if found:
-				return found
-	return null
 
 static func _circle_poly(radius: float, points: int) -> PackedVector2Array:
 	var arr := PackedVector2Array()

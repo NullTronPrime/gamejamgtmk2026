@@ -1,7 +1,6 @@
 extends Node2D
 
 const GridTrans := preload("res://scripts/ui/grid_transition.gd")
-const HumanoidRig := preload("res://scripts/shared/humanoid_rig.gd")
 const GRAVITY := 1400.0
 const JUMP_VEL := -480.0
 const MOVE_SPEED := 180.0
@@ -264,9 +263,23 @@ func _spawn_player() -> void:
 	var shape := RectangleShape2D.new(); shape.size = Vector2(28, 88)
 	var col := CollisionShape2D.new(); col.shape = shape; col.position = Vector2(0, 12)
 	_player.add_child(col)
-	HumanoidRig.build(_player, Color(0.55, 0.4, 0.25), Color(0.8, 0.65, 0.5))
-	for c in _player.get_children():
-		if c is Polygon2D: c.z_index = 1
+	var tex := load("res://assets/sprites/player/charactertilesheet.png")
+	if tex:
+		var sf := SpriteFrames.new()
+		sf.add_animation("walk")
+		sf.set_animation_speed("walk", 8.0)
+		sf.set_animation_loop("walk", true)
+		for i in 4:
+			var at := AtlasTexture.new()
+			at.atlas = tex
+			at.region = Rect2(0, i * 80, 40, 80)
+			sf.add_frame("walk", at)
+		var spr := AnimatedSprite2D.new()
+		spr.sprite_frames = sf
+		spr.play("walk")
+		spr.centered = true
+		spr.z_index = 1
+		_player.add_child(spr)
 	_player.position = Vector2(3*TILE, 9*TILE); add_child(_player)
 
 func _setup_camera() -> void:
@@ -436,24 +449,25 @@ func _show_vn_dialogue(title: String, text: String, duration: float) -> void:
 	var vn_layer := CanvasLayer.new()
 	vn_layer.layer = 25; vn_layer.name = "VNDialogue"; add_child(vn_layer)
 	var vn_box := ColorRect.new()
-	vn_box.color = Color(0.05, 0.05, 0.1, 0.9)
-	vn_box.position = Vector2(20, vs.y - 220)
-	vn_box.size = Vector2(vs.x - 40, 200)
+	vn_box.color = Color(0.05, 0.05, 0.1, 0.92)
+	vn_box.position = Vector2(10, vs.y - 260)
+	vn_box.size = Vector2(vs.x - 20, 250)
 	vn_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vn_layer.add_child(vn_box)
 	var vn_name := Label.new()
 	vn_name.text = title
-	vn_name.add_theme_font_size_override("font_size", 20)
+	vn_name.add_theme_font_size_override("font_size", 22)
 	vn_name.add_theme_color_override("font_color", Color(0.6, 0.7, 1, 1))
-	vn_name.position = Vector2(40, vs.y - 210)
+	vn_name.position = Vector2(30, vs.y - 248)
+	vn_name.size = Vector2(vs.x - 60, 30)
 	vn_name.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vn_layer.add_child(vn_name)
 	var vn_text := Label.new()
 	vn_text.text = text
-	vn_text.add_theme_font_size_override("font_size", 16)
+	vn_text.add_theme_font_size_override("font_size", 18)
 	vn_text.add_theme_color_override("font_color", Color(0.9, 0.9, 0.85, 1))
-	vn_text.position = Vector2(40, vs.y - 180)
-	vn_text.size = Vector2(vs.x - 80, 150)
+	vn_text.position = Vector2(30, vs.y - 210)
+	vn_text.size = Vector2(vs.x - 60, 180)
 	vn_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	vn_text.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vn_layer.add_child(vn_text)
@@ -463,8 +477,8 @@ func _show_vn_dialogue(title: String, text: String, duration: float) -> void:
 func reveal() -> void:
 	if GridTrans.is_available() and not GridTrans.is_busy(): await GridTrans.reveal(0.8)
 	_can_move = true
-	await _show_vn_dialogue("Betaal", "Well, I believe we could play some games to pass the time...", 3.0)
-	_show_vn_dialogue("Betaal", "O Mighty Rajan, here are one of my stories!", 3.0)
+	await _show_vn_dialogue("Betaal", "Well, I believe we could play some games to pass the time", 3.0)
+	_show_vn_dialogue("Betaal", "O Mighty Rajan, Here are one of my Stories", 3.0)
 
 func _physics_process(delta: float) -> void:
 	if not _can_move or not _player: return
@@ -472,6 +486,8 @@ func _physics_process(delta: float) -> void:
 	_player.velocity.x = dir * MOVE_SPEED
 	_player.velocity.y += GRAVITY * delta
 	if Input.is_action_just_pressed("jump") and _player.is_on_floor(): _player.velocity.y = JUMP_VEL
+	if abs(dir) > 0.1:
+		_player.scale.x = sign(dir) * abs(_player.scale.x)
 	_player.move_and_slide()
 	var cam := get_node_or_null("Camera2D") as Camera2D
 	if cam: cam.position = _player.position

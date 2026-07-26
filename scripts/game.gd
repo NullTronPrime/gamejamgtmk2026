@@ -252,3 +252,18 @@ func exit_hunting_grounds() -> void:
 		forest_level.set_backgrounds_visible(true)
 	if GridTrans.is_available() and not GridTrans.is_busy():
 		GridTrans.reveal(0.8)
+
+func return_to_title() -> void:
+	if library_room: library_room.queue_free(); library_room = null
+	if hunting_grounds: hunting_grounds.queue_free(); hunting_grounds = null
+	if dungeon_level: dungeon_level.queue_free(); dungeon_level = null
+	if room_level: room_level.queue_free(); room_level = null
+	if cave_level: cave_level.queue_free(); cave_level = null
+	if forest_level: forest_level.queue_free(); forest_level = null
+	var inv_layer := get_node_or_null("InventoryLayer")
+	if inv_layer: inv_layer.queue_free()
+	var pause_menu := get_node_or_null("PauseMenu")
+	if pause_menu: pause_menu.queue_free()
+	if GameManager.state_changed.is_connected(_on_game_state_changed):
+		GameManager.state_changed.disconnect(_on_game_state_changed)
+	_show_title()

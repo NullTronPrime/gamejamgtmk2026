@@ -1167,10 +1167,10 @@ func _add_gravestones() -> void:
 	if not gravestone_tex:
 		return
 
-	for i in 2:
+	for i in 1:
 		var area := Area2D.new()
 		area.name = "Gravestone_%d" % i
-		var x_pos = -200.0 + i * 400.0
+		var x_pos = 0.0
 		var gs := 0.125
 		area.position = Vector2(x_pos, GROUND_Y - gravestone_tex.get_size().y * gs * 0.5)
 
@@ -1228,59 +1228,6 @@ func _show_prompt(text: String) -> void:
 	tw.tween_property(l, "modulate:a", 0.0, 3.0).set_delay(2.5)
 	tw.finished.connect(l.queue_free)
 
-func _show_countdown_timer() -> void:
-	var cl := CanvasLayer.new(); cl.layer = 30; cl.name = "CountdownLayer"; add_child(cl)
-	var bg := ColorRect.new()
-	bg.color = Color(0, 0, 0, 0.7)
-	bg.size = DisplayServer.window_get_size()
-	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	cl.add_child(bg)
-	var label := Label.new()
-	label.add_theme_font_size_override("font_size", 64)
-	label.add_theme_color_override("font_color", Color(1, 0.8, 0.2, 1))
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.position = Vector2(0, 0)
-	label.size = DisplayServer.window_get_size()
-	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	cl.add_child(label)
-	var tick_start: float = 0.12; var tick_end: float = 0.04
-	for i in range(40, 0, -1):
-		label.text = str(i)
-		var t: float = float(40 - i) / 39.0
-		var wait: float = lerp(tick_start, tick_end, t)
-		await get_tree().create_timer(wait).timeout
-	cl.queue_free()
-
-func _show_vn_dialogue(title: String, text: String, duration: float) -> void:
-	var vs := DisplayServer.window_get_size()
-	var vn_layer := CanvasLayer.new()
-	vn_layer.layer = 25; vn_layer.name = "VNDialogue"; add_child(vn_layer)
-	var vn_box := ColorRect.new()
-	vn_box.color = Color(0.05, 0.05, 0.1, 0.9)
-	vn_box.position = Vector2(20, vs.y - 220)
-	vn_box.size = Vector2(vs.x - 40, 200)
-	vn_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	vn_layer.add_child(vn_box)
-	var vn_name := Label.new()
-	vn_name.text = title
-	vn_name.add_theme_font_size_override("font_size", 20)
-	vn_name.add_theme_color_override("font_color", Color(0.6, 0.7, 1, 1))
-	vn_name.position = Vector2(40, vs.y - 210)
-	vn_name.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	vn_layer.add_child(vn_name)
-	var vn_text := Label.new()
-	vn_text.text = text
-	vn_text.add_theme_font_size_override("font_size", 16)
-	vn_text.add_theme_color_override("font_color", Color(0.9, 0.9, 0.85, 1))
-	vn_text.position = Vector2(40, vs.y - 180)
-	vn_text.size = Vector2(vs.x - 80, 150)
-	vn_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	vn_text.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	vn_layer.add_child(vn_text)
-	await get_tree().create_timer(duration).timeout
-	vn_layer.queue_free()
-
 func _enter_room(room_idx: int) -> void:
 	if room_idx in _graves_broken:
 		_show_prompt("This grave is already broken. Nothing remains.")
@@ -1288,24 +1235,12 @@ func _enter_room(room_idx: int) -> void:
 	var game := get_node_or_null("/root/Game")
 	if not game:
 		return
-	var betaal_lines := [
-		"Where are you taking me, Mighty Rajan?",
-		"You know it's a long way, Right?",
-		"If you take too long to carry me back, I will fly right off your shoulders.",
-	]
-	await _show_vn_dialogue("Betaal", betaal_lines[randi() % betaal_lines.size()], 3.0)
-	await _show_countdown_timer()
-	await _show_vn_dialogue("Betaal", "Your time is running out, Mighty Rajan!", 2.5)
 	if GridTrans.is_available() and not GridTrans.is_busy():
 		await GridTrans.cover(0.8)
 	var ok := false
 	match room_idx:
 		0:
 			ok = game.enter_library_room()
-		1:
-			ok = game.enter_hunting_grounds()
-		2:
-			ok = game.enter_dungeon()
 	if not ok and GridTrans.is_available() and not GridTrans.is_busy():
 		GridTrans.reveal(0.8)
 
