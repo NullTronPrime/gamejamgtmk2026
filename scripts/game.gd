@@ -111,6 +111,7 @@ func enter_room() -> void:
 	if forest_level:
 		forest_level.visible = false
 		forest_level.process_mode = PROCESS_MODE_DISABLED
+		forest_level.set_backgrounds_visible(false)
 	room_level = preload("res://scenes/world/room_level.tscn").instantiate()
 	add_child(room_level)
 
@@ -123,6 +124,7 @@ func exit_room() -> void:
 	if forest_level:
 		forest_level.visible = true
 		forest_level.process_mode = PROCESS_MODE_INHERIT
+		forest_level.set_backgrounds_visible(true)
 	if GridTrans.is_available() and not GridTrans.is_busy():
 		GridTrans.reveal(0.8)
 
@@ -135,6 +137,7 @@ func enter_dungeon() -> void:
 	if forest_level:
 		forest_level.visible = false
 		forest_level.process_mode = PROCESS_MODE_DISABLED
+		forest_level.set_backgrounds_visible(false)
 	dungeon_level = preload("res://scenes/world/dungeon_level.tscn").instantiate()
 	add_child(dungeon_level)
 
@@ -146,6 +149,7 @@ func exit_dungeon() -> void:
 	if forest_level:
 		forest_level.visible = true
 		forest_level.process_mode = PROCESS_MODE_INHERIT
+		forest_level.set_backgrounds_visible(true)
 	if GridTrans.is_available() and not GridTrans.is_busy():
 		GridTrans.reveal(0.8)
 
@@ -158,6 +162,7 @@ func enter_cave() -> void:
 	if forest_level:
 		forest_level.visible = false
 		forest_level.process_mode = PROCESS_MODE_DISABLED
+		forest_level.set_backgrounds_visible(false)
 	cave_level = preload("res://scenes/world/cave_level.tscn").instantiate()
 	add_child(cave_level)
 
@@ -169,6 +174,7 @@ func exit_cave() -> void:
 	if forest_level:
 		forest_level.visible = true
 		forest_level.process_mode = PROCESS_MODE_INHERIT
+		forest_level.set_backgrounds_visible(true)
 	if GridTrans.is_available() and not GridTrans.is_busy():
 		GridTrans.reveal(0.8)
 
@@ -180,6 +186,10 @@ func enter_library_room() -> bool:
 	if forest_level:
 		forest_level.visible = false
 		forest_level.process_mode = PROCESS_MODE_DISABLED
+		forest_level.set_backgrounds_visible(false)
+		var hud = forest_level.get_node_or_null("HUD")
+		if hud and hud.has_method("set_room_mode"):
+			hud.set_room_mode(true)
 	var lib = load("res://scenes/world/library_room.tscn")
 	if not lib:
 		push_error("library_room.tscn failed to load")
@@ -196,6 +206,10 @@ func exit_library_room() -> void:
 	if forest_level:
 		forest_level.visible = true
 		forest_level.process_mode = PROCESS_MODE_INHERIT
+		forest_level.set_backgrounds_visible(true)
+		var hud = forest_level.get_node_or_null("HUD")
+		if hud and hud.has_method("set_room_mode"):
+			hud.set_room_mode(false)
 	if GridTrans.is_available() and not GridTrans.is_busy():
 		GridTrans.reveal(0.8)
 
@@ -208,6 +222,7 @@ func enter_hunting_grounds() -> bool:
 	if forest_level:
 		forest_level.visible = false
 		forest_level.process_mode = PROCESS_MODE_DISABLED
+		forest_level.set_backgrounds_visible(false)
 		hg = load("res://scenes/world/hunting_grounds.tscn")
 	if not hg:
 		push_error("hunting_grounds.tscn failed to load")
@@ -224,5 +239,6 @@ func exit_hunting_grounds() -> void:
 	if forest_level:
 		forest_level.visible = true
 		forest_level.process_mode = PROCESS_MODE_INHERIT
+		forest_level.set_backgrounds_visible(true)
 	if GridTrans.is_available() and not GridTrans.is_busy():
 		GridTrans.reveal(0.8)

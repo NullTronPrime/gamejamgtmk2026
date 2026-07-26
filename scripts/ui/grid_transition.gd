@@ -2,6 +2,11 @@ extends CanvasLayer
 class_name GridTransition
 
 const TAU := PI * 2
+const TRANSITION_SFX := [
+	"res://assets/audio/sfx/transition_1.wav",
+	"res://assets/audio/sfx/transition_2.wav",
+	"res://assets/audio/sfx/transition_3.wav",
+]
 
 static var _instance: GridTransition = null
 
@@ -10,6 +15,7 @@ var _spiral_mat: ShaderMaterial
 var _current_clock: Node2D
 var _busy := false
 var _ready_done := false
+var _sfx_player: AudioStreamPlayer
 
 func _ready() -> void:
 	_instance = self
@@ -37,6 +43,13 @@ func _ready() -> void:
 	_spiral_overlay.material = _spiral_mat
 	add_child(_spiral_overlay)
 
+	var sfx_path: String = TRANSITION_SFX[randi() % TRANSITION_SFX.size()]
+	var sfx_stream := load(sfx_path) as AudioStream
+	if sfx_stream:
+		_sfx_player = AudioStreamPlayer.new()
+		_sfx_player.stream = sfx_stream
+		add_child(_sfx_player)
+
 	_ready_done = true
 
 func _exit_tree() -> void:
@@ -45,10 +58,15 @@ func _exit_tree() -> void:
 static func is_available() -> bool:
 	return _instance != null and _instance._ready_done
 
-static func play(total_duration: float = 2.8) -> void:
+static func play(total_duration: float = -1.0) -> void:
 	if not is_available() or _instance._busy:
 		return
 	_instance._busy = true
+
+	if _instance._sfx_player:
+		if total_duration < 0.0:
+			total_duration = _instance._sfx_player.stream.get_length()
+		_instance._sfx_player.play()
 
 	var vs := DisplayServer.window_get_size()
 	var clock := preload("res://scripts/ui/enchant_clock.gd").new()
@@ -90,10 +108,15 @@ static func play(total_duration: float = 2.8) -> void:
 	_instance._current_clock = null
 	_instance._busy = false
 
-static func cover(duration: float = 1.2) -> void:
+static func cover(duration: float = -1.0) -> void:
 	if not is_available() or _instance._busy:
 		return
 	_instance._busy = true
+
+	if _instance._sfx_player:
+		if duration < 0.0:
+			duration = _instance._sfx_player.stream.get_length()
+		_instance._sfx_player.play()
 
 	var vs := DisplayServer.window_get_size()
 	var clock := preload("res://scripts/ui/enchant_clock.gd").new()
@@ -117,10 +140,16 @@ static func cover(duration: float = 1.2) -> void:
 	await _instance.get_tree().create_timer(duration).timeout
 	_instance._busy = false
 
-static func reveal(duration: float = 1.2) -> void:
+static func reveal(duration: float = -1.0) -> void:
 	if not is_available() or _instance._busy:
 		return
 	_instance._busy = true
+
+	if _instance._sfx_player:
+		if duration < 0.0:
+			duration = _instance._sfx_player.stream.get_length()
+		_instance._sfx_player.play()
+
 	var clock = _instance._current_clock
 	if not clock or not is_instance_valid(clock):
 		var vs := DisplayServer.window_get_size()

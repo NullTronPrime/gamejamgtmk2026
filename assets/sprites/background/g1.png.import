@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://7lwellmqtsid"
-path="res://.godot/imported/ground_legs.png-4efb9cf06cd0e33dfc1284a44978c4f4.ctex"
+uid="uid://djh4q5yk6l3py"
+path="res://.godot/imported/g1.png-4a3d17e557c73f5f5b1f3cb807a4aa16.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/art/skeleton/ground_legs.png"
-dest_files=["res://.godot/imported/ground_legs.png-4efb9cf06cd0e33dfc1284a44978c4f4.ctex"]
+source_file="res://assets/sprites/background/g1.png"
+dest_files=["res://.godot/imported/g1.png-4a3d17e557c73f5f5b1f3cb807a4aa16.ctex"]
 
 [params]
 

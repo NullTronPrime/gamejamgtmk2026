@@ -501,6 +501,13 @@ func _build_terrain() -> void:
 	grass_top.color = Color(0.08, 0.18, 0.06)
 	add_child(grass_top)
 
+func set_backgrounds_visible(v: bool) -> void:
+	if _skybox_layer:
+		_skybox_layer.visible = v
+	var pb = get_node_or_null("ParallaxBackdrop")
+	if pb:
+		pb.visible = v
+
 func _build_skybox() -> void:
 	var ws = DisplayServer.window_get_size()
 	_skybox_width = max(ws.x, 1280)

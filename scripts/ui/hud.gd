@@ -141,6 +141,11 @@ func _on_puzzle_type_changed(puzzle_type: int) -> void:
 	var tween = create_tween()
 	tween.tween_property(puzzle_type_label, "modulate", Color(1, 1, 1, 1), 1.0)
 
+func set_room_mode(in_room: bool) -> void:
+	_dist_label.visible = not in_room
+	puzzle_type_label.visible = not in_room
+	$Panel.visible = not in_room
+
 func reset() -> void:
 	warning_shown = false
 	warning_label.visible = false
