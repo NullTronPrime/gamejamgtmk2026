@@ -292,14 +292,7 @@ class RockDraw extends Node2D:
 
 
 const LEVEL_WIDTH = 8000
-const DEPTH_NEAR = 600
-const DEPTH_FAR = 0
-
-const ROAD_ANGLE_FAR := 0
-const ROAD_ANGLE_NEAR := 180
-
-func _road_center_x(t: float) -> float:
-	return lerp(float(ROAD_ANGLE_FAR), float(ROAD_ANGLE_NEAR), t)
+const GROUND_Y := 480.0
 
 var player_scene: PackedScene
 var player_instance: CharacterBody2D
@@ -396,6 +389,7 @@ func _ready() -> void:
 	GameManager.save_requested.connect(_on_save_requested)
 	GameManager.load_completed.connect(_on_load_completed)
 	GameManager.start_run()
+	_add_gravestones()
 
 func _setup_phantom_camera() -> void:
 	if not ClassDB.class_exists(&"PhantomCamera2D"):
@@ -455,6 +449,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		var inv = get_node_or_null("/root/Game/InventoryLayer/InventoryUI")
 		if inv and inv.has_method("toggle"):
 			inv.toggle()
+	if event is InputEventKey and event.keycode == KEY_E and event.pressed and not event.echo:
+		if _gravestone_near >= 0:
+			_enter_room(_gravestone_near)
 
 func _test_spiral() -> void:
 	await GridTrans.play(3.2)
@@ -478,11 +475,6 @@ func _process(delta: float) -> void:
 		if _chunk_gen_timer <= 0.0:
 			_generate_props_ahead()
 			_chunk_gen_timer = 0.15
-	var cam = player_instance.get_node_or_null("Camera2D") if player_instance else null
-	if cam:
-		var vh = _skybox_height * 0.5
-		var max_y = vh - 80.0
-		cam.offset.y = -max(0.0, player_instance.position.y - max_y)
 	if player_instance and not _parallax_layers.is_empty():
 		var px = player_instance.position.x
 		for l in _parallax_layers:
@@ -493,36 +485,21 @@ func _process(delta: float) -> void:
 func _build_terrain() -> void:
 	var TERRAIN_HALF = 50000
 
-	var dirt = ColorRect.new()
-	dirt.name = "Dirt"
-	dirt.offset_left = -TERRAIN_HALF
-	dirt.offset_top = DEPTH_FAR
-	dirt.size = Vector2(TERRAIN_HALF * 2, DEPTH_NEAR - DEPTH_FAR)
-	dirt.color = Color(0.12, 0.08, 0.04)
-	add_child(dirt)
+	var ground = ColorRect.new()
+	ground.name = "Ground"
+	ground.offset_left = -TERRAIN_HALF
+	ground.offset_top = 0
+	ground.size = Vector2(TERRAIN_HALF * 2, 600)
+	ground.color = Color(0.12, 0.08, 0.04)
+	add_child(ground)
 
-	var rng = RandomNumberGenerator.new()
-	rng.seed = hash("perspective_stripes")
-	for i in range(40):
-		var t = float(i) / 40.0
-		var y = DEPTH_FAR + t * (DEPTH_NEAR - DEPTH_FAR)
-		var path_w = lerp(200.0, 800.0, t)
-		var cx = _road_center_x(t)
-		var stripe = ColorRect.new()
-		stripe.offset_left = cx - path_w / 2
-		stripe.offset_top = y - 1
-		stripe.size = Vector2(path_w, 2)
-		var c = 0.18 if i % 2 == 0 else 0.14
-		stripe.color = Color(c, c * 0.7, c * 0.4)
-		add_child(stripe)
-
-	var grass_bottom = ColorRect.new()
-	grass_bottom.name = "GrassBottom"
-	grass_bottom.offset_left = -TERRAIN_HALF
-	grass_bottom.offset_top = DEPTH_NEAR
-	grass_bottom.size = Vector2(TERRAIN_HALF * 2, 60)
-	grass_bottom.color = Color(0.08, 0.18, 0.06)
-	add_child(grass_bottom)
+	var grass_top = ColorRect.new()
+	grass_top.name = "GrassTop"
+	grass_top.offset_left = -TERRAIN_HALF
+	grass_top.offset_top = 0
+	grass_top.size = Vector2(TERRAIN_HALF * 2, 8)
+	grass_top.color = Color(0.08, 0.18, 0.06)
+	add_child(grass_top)
 
 func _build_skybox() -> void:
 	var ws = DisplayServer.window_get_size()
@@ -582,7 +559,6 @@ func _add_parallax_backdrop() -> void:
 func _generate_forest() -> void:
 	var props = Node2D.new()
 	props.name = "ForestProps"
-	props.y_sort_enabled = true
 	add_child(props)
 	_generated_chunk_min = -3
 	_generated_chunk_max = 3
@@ -595,30 +571,27 @@ func _generate_chunk(ci: int) -> void:
 	if not props:
 		return
 	var rng = RandomNumberGenerator.new()
-	rng.seed = hash("diagonal_forest_%d" % ci)
+	rng.seed = hash("flat_forest_%d" % ci)
 	var cx = ci * CHUNK_SIZE
 
 	var giant_chance = rng.randf()
 	if giant_chance < 0.10:
-		var gt = rng.randf_range(0.25, 0.75)
-		var gx = cx + _road_center_x(gt) + rng.randf_range(-120, 120)
-		var gy = DEPTH_FAR + gt * (DEPTH_NEAR - DEPTH_FAR)
+		var gx = cx + rng.randf_range(-200, 200)
+		var gy = GROUND_Y - rng.randf_range(50, 150)
 		_chunk_idx_counter += 1
 		var giant_w = rng.randf_range(100, 150)
 		var giant_h = rng.randf_range(550, 800)
 		var giant_variant = rng.randi() % 3
 		_build_tree(props, "GiantTree_%d" % _chunk_idx_counter, gx, gy, Color(0.12, 0.35, 0.08), giant_w, giant_h, giant_variant, rng.randf_range(-3.0, 3.0))
-		environment.register_tree("GiantTree_%d" % _chunk_idx_counter, gx, gy, gt)
+		environment.register_tree("GiantTree_%d" % _chunk_idx_counter, gx, gy, 1.0)
 		observation.register_object("GiantTree_%d" % _chunk_idx_counter, Vector2(gx, gy), "tree")
 
 	var tree_count = rng.randi_range(1, 2)
 	for i in tree_count:
-		var t = rng.randf_range(0.0, 1.0)
-		var ty = DEPTH_FAR + t * (DEPTH_NEAR - DEPTH_FAR)
-		var path_w = lerp(200.0, 800.0, t)
 		var side = 1.0 if rng.randi() % 2 == 0 else -1.0
-		var dist = path_w / 2 + rng.randf_range(30, 180)
-		var tx = cx + _road_center_x(t) + side * dist
+		var dist = rng.randf_range(100, 350)
+		var tx = cx + side * dist
+		var ty = GROUND_Y - rng.randf_range(80, 200)
 		var th = rng.randf_range(150, 450)
 		var tw = rng.randf_range(35, 90)
 		var variant = rng.randi() % 5
@@ -637,16 +610,15 @@ func _generate_chunk(ci: int) -> void:
 		_chunk_idx_counter += 1
 		var tree_name = "Tree_%d" % _chunk_idx_counter
 		_build_tree(props, tree_name, tx, ty, leaf_color, tw, th, variant, tilt)
-		environment.register_tree(tree_name, tx, ty, t)
+		environment.register_tree(tree_name, tx, ty, 1.0)
 		observation.register_object(tree_name, Vector2(tx, ty), "tree")
 
 	var bush_count = rng.randi_range(0, 1)
 	for i in bush_count:
-		var t = rng.randf_range(0.0, 1.0)
-		var by = DEPTH_FAR + t * (DEPTH_NEAR - DEPTH_FAR)
 		var bw = rng.randf_range(25, 45)
 		var bh = rng.randf_range(18, 35)
-		var bx = cx + _road_center_x(t) + rng.randf_range(-300, 300)
+		var bx = cx + rng.randf_range(-350, 350)
+		var by = GROUND_Y + 10
 		_chunk_idx_counter += 1
 		var bush_name = "Bush_%d" % _chunk_idx_counter
 		_build_rect_prop(props, bush_name, bx, by, Color(0.1, 0.3, 0.08), bw, bh)
@@ -655,10 +627,9 @@ func _generate_chunk(ci: int) -> void:
 
 	var rock_count = rng.randi_range(0, 1)
 	for i in rock_count:
-		var t = rng.randf_range(0.1, 0.9)
-		var ry = DEPTH_FAR + t * (DEPTH_NEAR - DEPTH_FAR)
 		var rs = rng.randf_range(12, 30)
-		var rx = cx + _road_center_x(t) + rng.randf_range(-350, 350)
+		var rx = cx + rng.randf_range(-350, 350)
+		var ry = GROUND_Y + 8
 		_chunk_idx_counter += 1
 		var rock_name = "Rock_%d" % _chunk_idx_counter
 		_build_rect_prop(props, rock_name, rx, ry, Color(0.25, 0.22, 0.18), rs, rs * 0.5)
@@ -667,11 +638,10 @@ func _generate_chunk(ci: int) -> void:
 	
 	var shrub_count = rng.randi_range(0, 1)
 	for i in shrub_count:
-		var t = rng.randf_range(0.0, 1.0)
-		var sy = DEPTH_FAR + t * (DEPTH_NEAR - DEPTH_FAR)
 		var sw = rng.randf_range(12, 22)
 		var sh = rng.randf_range(10, 18)
-		var sx = cx + _road_center_x(t) + rng.randf_range(-250, 250)
+		var sx = cx + rng.randf_range(-250, 250)
+		var sy = GROUND_Y + 10
 		_chunk_idx_counter += 1
 		var shrub_name = "Shrub_%d" % _chunk_idx_counter
 		_build_rect_prop(props, shrub_name, sx, sy, Color(0.08, 0.22, 0.06), sw, sh)
@@ -696,39 +666,22 @@ func _build_tree(parent: Node2D, tree_name: String, x: float, y: float, color: C
 	node.rotation = deg_to_rad(tilt)
 
 	var tree = Plant2D.new()
-	var depth_t = clamp((y - DEPTH_FAR) / max(1.0, DEPTH_NEAR - DEPTH_FAR), 0.0, 1.0)
-	var is_far = depth_t < 0.4
 
-	# near: 4 steps for good leaf coverage, far: 3 steps (small, minimal detail)
-	var steps = 3 if is_far else 4
-	var leaf_start = 2 if is_far else 3
+	var steps = 4
+	var leaf_start = 3
 
 	match variant:
 		0:
-			if is_far:
-				var r: Dictionary[String, String] = {}
-				r["X"] = "[-l+++l]f[+l---l]f[A]"
-				r["A"] = "[+++B][-j]f[---C]"
-				r["B"] = "[--l]f[+D]B"
-				r["C"] = "[++l]f[-D]C"
-				r["D"] = "E"
-				r["E"] = "[--l]fD"
-				tree.rules = r
-				tree.angle = 26.0
-				tree.branch_length = clamp(h / 12.0, 5.0, 20.0)
-				tree.leaf_color = Color(color.r * 0.6, color.g * 0.7, color.b * 0.6)
-				tree.leaf_scale = clamp(w / 20.0, 0.5, 2.0)
-			else:
-				var r: Dictionary[String, String] = {}
-				r["X"] = "fA"
-				r["A"] = "[--l++++l][-Y]fB"
-				r["Y"] = "fB"
-				r["B"] = "[--l++++l][+X]fA"
-				tree.rules = r
-				tree.angle = 30.0
-				tree.branch_length = clamp(h / 15.0, 6.0, 40.0)
-				tree.leaf_color = color
-				tree.leaf_scale = clamp(w / 25.0, 0.8, 5.0)
+			var r: Dictionary[String, String] = {}
+			r["X"] = "fA"
+			r["A"] = "[--l++++l][-Y]fB"
+			r["Y"] = "fB"
+			r["B"] = "[--l++++l][+X]fA"
+			tree.rules = r
+			tree.angle = 30.0
+			tree.branch_length = clamp(h / 15.0, 6.0, 40.0)
+			tree.leaf_color = color
+			tree.leaf_scale = clamp(w / 25.0, 0.8, 5.0)
 		1:
 			var r: Dictionary[String, String] = {}
 			r["X"] = "f[+l][-l]"
@@ -738,73 +691,39 @@ func _build_tree(parent: Node2D, tree_name: String, x: float, y: float, color: C
 			tree.leaf_color = color
 			tree.leaf_scale = clamp(w / 12.0, 1.2, 6.0)
 		2:
-			if is_far:
-				var r: Dictionary[String, String] = {}
-				r["X"] = "l[+l][-l]f[A]"
-				r["A"] = "fB"
-				r["B"] = "[+l][-l]"
-				tree.rules = r
-				tree.angle = 35.0
-				tree.branch_length = clamp(h / 10.0, 6.0, 22.0)
-				tree.leaf_color = Color(color.r * 0.6, color.g * 0.7, color.b * 0.6)
-				tree.leaf_scale = clamp(w / 20.0, 0.5, 2.0)
-			else:
-				var r: Dictionary[String, String] = {}
-				r["X"] = "fA"
-				r["A"] = "[--l][++l]fB"
-				r["B"] = "[--l][++l]"
-				tree.rules = r
-				tree.angle = 35.0
-				tree.branch_length = clamp(h / 12.0, 8.0, 50.0)
-				tree.leaf_color = color
-				tree.leaf_scale = clamp(w / 22.0, 0.8, 5.0)
+			var r: Dictionary[String, String] = {}
+			r["X"] = "fA"
+			r["A"] = "[--l][++l]fB"
+			r["B"] = "[--l][++l]"
+			tree.rules = r
+			tree.angle = 35.0
+			tree.branch_length = clamp(h / 12.0, 8.0, 50.0)
+			tree.leaf_color = color
+			tree.leaf_scale = clamp(w / 22.0, 0.8, 5.0)
 		3:
-			if is_far:
-				var r: Dictionary[String, String] = {}
-				r["X"] = "f[+F][-F]A"
-				r["A"] = "f[+F][-F]B"
-				r["B"] = "f[+l][-l]C"
-				r["C"] = "f[+l][-l]"
-				tree.rules = r
-				tree.angle = 28.0
-				tree.branch_length = clamp(h / 14.0, 4.0, 14.0)
-				tree.leaf_color = Color(color.r * 0.7, color.g * 0.8, color.b * 0.7)
-				tree.leaf_scale = clamp(w / 18.0, 0.8, 2.5)
-			else:
-				var r: Dictionary[String, String] = {}
-				r["X"] = "fA"
-				r["A"] = "[--l++++l][++l][--l]fB"
-				r["B"] = "[--l++++l][++l][--l]fC"
-				r["C"] = "[--l++++l][++l][--l]"
-				tree.rules = r
-				tree.angle = 25.0
-				tree.branch_length = clamp(h / 18.0, 5.0, 30.0)
-				tree.leaf_color = color
-				tree.leaf_scale = clamp(w / 20.0, 1.0, 5.0)
+			var r: Dictionary[String, String] = {}
+			r["X"] = "fA"
+			r["A"] = "[--l++++l][++l][--l]fB"
+			r["B"] = "[--l++++l][++l][--l]fC"
+			r["C"] = "[--l++++l][++l][--l]"
+			tree.rules = r
+			tree.angle = 25.0
+			tree.branch_length = clamp(h / 18.0, 5.0, 30.0)
+			tree.leaf_color = color
+			tree.leaf_scale = clamp(w / 20.0, 1.0, 5.0)
 		4:
-			if is_far:
-				var r: Dictionary[String, String] = {}
-				r["X"] = "[+k][-k]f[+k]f[-k]f[A]"
-				r["A"] = "[+k]f[-k]f[B]"
-				r["B"] = "[+l]f[-l]"
-				tree.rules = r
-				tree.angle = 40.0
-				tree.branch_length = clamp(h / 11.0, 5.0, 18.0)
-				tree.leaf_color = Color(color.r * 0.5, color.g * 0.6, color.b * 0.5)
-				tree.leaf_scale = clamp(w / 22.0, 0.4, 1.8)
-			else:
-				var r: Dictionary[String, String] = {}
-				r["X"] = "fA"
-				r["A"] = "[+Y]f[-Z]fB"
-				r["Y"] = "[--l]f[++l]"
-				r["Z"] = "[++l]f[--l]"
-				r["B"] = "[+Y]f[-Z]fC"
-				r["C"] = "[--l][++l]"
-				tree.rules = r
-				tree.angle = 38.0
-				tree.branch_length = clamp(h / 13.0, 6.0, 40.0)
-				tree.leaf_color = color
-				tree.leaf_scale = clamp(w / 24.0, 0.6, 4.0)
+			var r: Dictionary[String, String] = {}
+			r["X"] = "fA"
+			r["A"] = "[+Y]f[-Z]fB"
+			r["Y"] = "[--l]f[++l]"
+			r["Z"] = "[++l]f[--l]"
+			r["B"] = "[+Y]f[-Z]fC"
+			r["C"] = "[--l][++l]"
+			tree.rules = r
+			tree.angle = 38.0
+			tree.branch_length = clamp(h / 13.0, 6.0, 40.0)
+			tree.leaf_color = color
+			tree.leaf_scale = clamp(w / 24.0, 0.6, 4.0)
 
 	tree.max_steps = steps
 	tree.current_step = steps
@@ -1233,7 +1152,7 @@ func _add_leaf_litter() -> void:
 		_make_lit(leaf)
 
 func _get_crossroad_position(idx: int) -> Vector2:
-	return Vector2(crossroad_start_x + idx * crossroad_spacing, lerp(200.0, 80.0, float(idx) / float(crossroad_count - 1)))
+	return Vector2(crossroad_start_x + idx * crossroad_spacing, 300.0)
 
 func _load_crossroad_config() -> void:
 	var path = "res://config/crossroads.json"
@@ -1291,7 +1210,7 @@ func _generate_crossroad(idx: int) -> void:
 		var t = float(i) / float(stripe_count - 1)
 		var y = t * road_max_y
 		var path_w = lerp(200.0, 800.0, t)
-		var rcx = cx + _road_center_x(t)
+		var rcx = cx
 
 		if y >= cy:
 			var stripe = ColorRect.new()
@@ -1319,7 +1238,7 @@ func _generate_crossroad(idx: int) -> void:
 	var t_cy = cy / road_max_y
 	var trigger = Area2D.new()
 	trigger.name = "CenterDot"
-	trigger.position = Vector2(cx + _road_center_x(t_cy), cy)
+	trigger.position = Vector2(cx, cy)
 
 	var dot_visual = ColorRect.new()
 	dot_visual.name = "DotVisual"
@@ -1531,6 +1450,77 @@ func _animate_lights(delta: float) -> void:
 
 	if _firefly_particles and player_instance:
 		_firefly_particles.position = player_instance.position
+
+func _add_gravestones() -> void:
+	var gravestone_tex = load("res://assets/dungeon/gravestone.png")
+	if not gravestone_tex:
+		return
+
+	for i in 2:
+		var area := Area2D.new()
+		area.name = "Gravestone_%d" % i
+		var x_pos = 300.0 + i * 200.0
+		area.position = Vector2(x_pos, GROUND_Y - 20)
+
+		var sprite := Sprite2D.new()
+		sprite.texture = gravestone_tex
+		sprite.scale = Vector2(0.5, 0.5)
+		sprite.centered = true
+		area.add_child(sprite)
+
+		var shape := CollisionShape2D.new()
+		var rect := RectangleShape2D.new()
+		rect.size = sprite.texture.get_size() * 0.5
+		shape.shape = rect
+		area.add_child(shape)
+
+		var prompt := Label.new()
+		prompt.name = "Prompt"
+		prompt.text = "Press E" if i == 0 else "Press E"
+		prompt.add_theme_font_size_override("font_size", 14)
+		prompt.add_theme_color_override("font_color", Color(1, 1, 0.8, 0.9))
+		prompt.position = Vector2(-40, -sprite.texture.get_size().y * 0.3)
+		prompt.visible = false
+		area.add_child(prompt)
+
+		area.body_entered.connect(_on_gravestone_entered.bind(i))
+		area.body_exited.connect(_on_gravestone_exited.bind(i))
+		add_child(area)
+
+var _gravestone_near: int = -1
+
+func _on_gravestone_entered(body: Node, idx: int) -> void:
+	if body == player_instance:
+		_gravestone_near = idx
+		var area = get_node_or_null("Gravestone_%d" % idx)
+		if area:
+			var prompt = area.get_node_or_null("Prompt")
+			if prompt:
+				prompt.visible = true
+
+func _on_gravestone_exited(body: Node, idx: int) -> void:
+	if body == player_instance:
+		_gravestone_near = -1
+		var area = get_node_or_null("Gravestone_%d" % idx)
+		if area:
+			var prompt = area.get_node_or_null("Prompt")
+			if prompt:
+				prompt.visible = false
+
+func _enter_room(room_idx: int) -> void:
+	var game := get_node_or_null("/root/Game")
+	if not game:
+		return
+	if GridTrans.is_available() and not GridTrans.is_busy():
+		await GridTrans.cover(0.8)
+	var ok := false
+	match room_idx:
+		0:
+			ok = game.enter_library_room()
+		1:
+			ok = game.enter_hunting_grounds()
+	if not ok and GridTrans.is_available() and not GridTrans.is_busy():
+		GridTrans.reveal(0.8)
 
 func _make_lit(item: CanvasItem) -> void:
 	var shader = load("res://addons/lit/shaders/lit_receiver_fast.gdshader")

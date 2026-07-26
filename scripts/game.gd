@@ -9,6 +9,8 @@ var options_menu: CanvasLayer
 var room_level: Node2D
 var dungeon_level: Node2D
 var cave_level: Node2D
+var library_room: Node2D
+var hunting_grounds: Node2D
 
 func _ready() -> void:
 	_show_title()
@@ -164,6 +166,60 @@ func exit_cave() -> void:
 		return
 	cave_level.queue_free()
 	cave_level = null
+	if forest_level:
+		forest_level.visible = true
+		forest_level.process_mode = PROCESS_MODE_INHERIT
+	if GridTrans.is_available() and not GridTrans.is_busy():
+		GridTrans.reveal(0.8)
+
+func enter_library_room() -> bool:
+	if library_room:
+		return true
+	if not GridTrans.is_available() or GridTrans.is_busy():
+		return false
+	if forest_level:
+		forest_level.visible = false
+		forest_level.process_mode = PROCESS_MODE_DISABLED
+	var lib = load("res://scenes/world/library_room.tscn")
+	if not lib:
+		push_error("library_room.tscn failed to load")
+		return false
+	library_room = lib.instantiate()
+	add_child(library_room)
+	return true
+
+func exit_library_room() -> void:
+	if not library_room:
+		return
+	library_room.queue_free()
+	library_room = null
+	if forest_level:
+		forest_level.visible = true
+		forest_level.process_mode = PROCESS_MODE_INHERIT
+	if GridTrans.is_available() and not GridTrans.is_busy():
+		GridTrans.reveal(0.8)
+
+func enter_hunting_grounds() -> bool:
+	if hunting_grounds:
+		return true
+	if not GridTrans.is_available() or GridTrans.is_busy():
+		return false
+	if forest_level:
+		forest_level.visible = false
+		forest_level.process_mode = PROCESS_MODE_DISABLED
+	var hg = load("res://scenes/world/hunting_grounds.tscn")
+	if not hg:
+		push_error("hunting_grounds.tscn failed to load")
+		return false
+	hunting_grounds = hg.instantiate()
+	add_child(hunting_grounds)
+	return true
+
+func exit_hunting_grounds() -> void:
+	if not hunting_grounds:
+		return
+	hunting_grounds.queue_free()
+	hunting_grounds = null
 	if forest_level:
 		forest_level.visible = true
 		forest_level.process_mode = PROCESS_MODE_INHERIT
