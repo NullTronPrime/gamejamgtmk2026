@@ -1,103 +1,20 @@
 [gd_scene format=3]
 
 [ext_resource type="Script" path="res://scripts/cutscenes/intro_cutscene.gd" id="1"]
-[ext_resource type="Texture2D" path="res://addons/at-icons/node3d/tree.svg" id="2"]
-[ext_resource type="Texture2D" path="res://addons/at-icons/node3d/human.svg" id="3"]
-[ext_resource type="Texture2D" path="res://addons/at-icons/node3d/ghost.svg" id="4"]
-[ext_resource type="Texture2D" path="res://addons/at-icons/node3d/hourglass.svg" id="5"]
 
 [node name="IntroCutscene" type="CanvasLayer"]
 script = ExtResource("1")
 
-[node name="Background" type="ColorRect" parent="."]
-anchor_left = 0.0
-anchor_top = 0.0
-anchor_right = 1.0
-anchor_bottom = 1.0
-color = Color(0, 0, 0, 1)
-
-[node name="IconContainer" type="HBoxContainer" parent="."]
-anchor_left = 0.5
-anchor_top = 0.1
-anchor_right = 0.5
-anchor_bottom = 0.1
-alignment = 2
-offset_left = -100.0
-offset_top = 0.0
-offset_right = 100.0
-offset_bottom = 100.0
-
-[node name="TreeIcon" type="TextureRect" parent="IconContainer"]
-custom_minimum_size = Vector2(64, 64)
-stretch_mode = 2
-texture = ExtResource("2")
-modulate = Color(0.3, 0.6, 0.2, 1)
-
-[node name="HumanIcon" type="TextureRect" parent="IconContainer"]
-custom_minimum_size = Vector2(64, 64)
-stretch_mode = 2
-texture = ExtResource("3")
-modulate = Color(0.7, 0.7, 0.8, 1)
-
-[node name="GhostIcon" type="TextureRect" parent="IconContainer"]
-custom_minimum_size = Vector2(64, 64)
-stretch_mode = 2
-texture = ExtResource("4")
-modulate = Color(0.8, 0.3, 0.3, 1)
-
-[node name="HourglassIcon" type="TextureRect" parent="IconContainer"]
-custom_minimum_size = Vector2(64, 64)
-stretch_mode = 2
-texture = ExtResource("5")
-modulate = Color(0.8, 0.6, 0.2, 1)
-
-[node name="TextLabel" type="RichTextLabel" parent="."]
-anchor_left = 0.15
-anchor_top = 0.2
-anchor_right = 0.85
-anchor_bottom = 0.7
-theme_override_font_sizes/normal_font_size = 22
-theme_override_colors/default_color = Color(0.9, 0.9, 0.9, 1)
-text = "sampletext"
-
 [node name="SkipButton" type="Button" parent="."]
-anchor_left = 0.8
-anchor_top = 0.85
-anchor_right = 0.95
-anchor_bottom = 0.92
+anchor_left = 0.85
+anchor_top = 0.02
+anchor_right = 0.98
+anchor_bottom = 0.08
 text = "Skip"
 
-[node name="SkipIcon" type="TextureRect" parent="SkipButton"]
-layout_mode = 1
-anchors_preset = 3
-anchor_left = 0.05
-anchor_top = 0.15
-anchor_right = 0.05
-anchor_bottom = 0.85
-offset_left = 0.0
-offset_top = 0.0
-offset_right = 30.0
-offset_bottom = 0.0
-stretch_mode = 2
-texture = ExtResource("5")
-
 [node name="ContinueButton" type="Button" parent="."]
-anchor_left = 0.35
-anchor_top = 0.75
-anchor_right = 0.65
-anchor_bottom = 0.82
+anchor_left = 0.4
+anchor_top = 0.85
+anchor_right = 0.6
+anchor_bottom = 0.92
 text = "Continue"
-
-[node name="ContinueIcon" type="TextureRect" parent="ContinueButton"]
-layout_mode = 1
-anchors_preset = 3
-anchor_left = 0.05
-anchor_top = 0.15
-anchor_right = 0.05
-anchor_bottom = 0.85
-offset_left = 0.0
-offset_top = 0.0
-offset_right = 35.0
-offset_bottom = 0.0
-stretch_mode = 2
-texture = ExtResource("3")

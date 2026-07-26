@@ -35,7 +35,18 @@ static func item_data() -> Dictionary:
 		"flower_bunch": { "name": "Bunch of Flowers", "icon": Color(0.9, 0.3, 0.5) },
 		"berry": { "name": "Berry", "icon": Color(0.8, 0.1, 0.1) },
 		"letter_shaktinath": { "name": "Shaktinath's Letter", "icon": Color(0.9, 0.8, 0.5) },
-		"snake_scales": { "name": "Snake Scales", "icon": Color(0.2, 0.6, 0.3) }
+		"snake_scales": { "name": "Snake Scales", "icon": Color(0.2, 0.6, 0.3) },
+		"lion_neck": { "name": "Lion Neck Bone", "icon": Color(0.75, 0.7, 0.55) },
+		"lion_arms": { "name": "Lion Arms", "icon": Color(0.7, 0.65, 0.5) },
+		"lion_legs": { "name": "Lion Legs", "icon": Color(0.7, 0.65, 0.5) },
+		"lion_tail": { "name": "Lion Tail", "icon": Color(0.8, 0.75, 0.6) },
+		"skeleton_neck": { "name": "Lion Neck Bone", "icon": Color(0.75, 0.7, 0.55), "icon_texture": preload("res://assets/art/skeleton/icon_neck.png") },
+		"skeleton_skull": { "name": "Lion Skull", "icon": Color(0.8, 0.75, 0.6), "icon_texture": preload("res://assets/art/skeleton/icon_skull.png") },
+		"skeleton_arms": { "name": "Lion Front Legs", "icon": Color(0.7, 0.65, 0.5), "icon_texture": preload("res://assets/art/skeleton/icon_arms.png") },
+		"skeleton_ribs": { "name": "Lion Ribcage", "icon": Color(0.78, 0.73, 0.6), "icon_texture": preload("res://assets/art/skeleton/icon_ribs.png") },
+		"skeleton_legs": { "name": "Lion Back Legs", "icon": Color(0.7, 0.65, 0.5), "icon_texture": preload("res://assets/art/skeleton/icon_legs.png") },
+		"skeleton_tail": { "name": "Lion Tail", "icon": Color(0.82, 0.77, 0.65), "icon_texture": preload("res://assets/art/skeleton/icon_tail.png") },
+		"life_potion": { "name": "Potion of Life", "icon": Color(0.2, 0.8, 0.9), "icon_texture": preload("res://assets/art/rooms/lifebottle.png") }
 	}
 
 func add_item(item_id: String) -> bool:

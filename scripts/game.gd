@@ -204,10 +204,11 @@ func enter_hunting_grounds() -> bool:
 		return true
 	if not GridTrans.is_available() or GridTrans.is_busy():
 		return false
+	var hg = null
 	if forest_level:
 		forest_level.visible = false
 		forest_level.process_mode = PROCESS_MODE_DISABLED
-	var hg = load("res://scenes/world/hunting_grounds.tscn")
+		hg = load("res://scenes/world/hunting_grounds.tscn")
 	if not hg:
 		push_error("hunting_grounds.tscn failed to load")
 		return false

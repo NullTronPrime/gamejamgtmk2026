@@ -13,23 +13,23 @@ var _moused_over := false
 
 func _ready() -> void:
 	gravity_scale = 1.0
-	lock_rotation = true
-	linear_damp = 0.5
-	angular_damp = 2.0
+	lock_rotation = false
+	linear_damp = 0.3
+	angular_damp = 1.0
 	mass = randf_range(3.0, 8.0)
 
 	collision_layer = 4
 	collision_mask = 1 | 2
 
 	var mat := PhysicsMaterial.new()
-	mat.friction = 0.95
-	mat.bounce = 0.0
+	mat.friction = 0.6
+	mat.bounce = 0.1
 	physics_material_override = mat
 
 	var shape := CollisionShape2D.new()
-	var box := RectangleShape2D.new()
-	box.size = Vector2(32, 32)
-	shape.shape = box
+	var ball := CircleShape2D.new()
+	ball.radius = 16
+	shape.shape = ball
 	add_child(shape)
 
 	_build_sprite()
@@ -41,21 +41,21 @@ func _build_exclamation() -> void:
 	_exclamation.position = Vector2(-9, -46)
 	_exclamation.color = Color(0.9, 0.1, 0.1, 0.9)
 	_exclamation.visible = false
-	_exclamation.mouse_filter = 2
+	_exclamation.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_exclamation)
 
 	var bar := ColorRect.new()
 	bar.size = Vector2(8, 14)
 	bar.position = Vector2(-4, -42)
 	bar.color = Color(1, 1, 1, 1)
-	bar.mouse_filter = 2
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_exclamation.add_child(bar)
 
 	var dot := ColorRect.new()
 	dot.size = Vector2(4, 4)
 	dot.position = Vector2(-2, -22)
 	dot.color = Color(1, 1, 1, 1)
-	dot.mouse_filter = 2
+	dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_exclamation.add_child(dot)
 
 func _build_sprite() -> void:
@@ -72,7 +72,13 @@ func _build_sprite() -> void:
 		"flower_bunch": { "body": Color(0.9, 0.3, 0.5), "detail": Color(0.7, 0.2, 0.4) },
 		"berry": { "body": Color(0.8, 0.1, 0.1), "detail": Color(0.6, 0.05, 0.05) },
 		"letter_shaktinath": { "body": Color(0.9, 0.8, 0.5), "detail": Color(0.7, 0.6, 0.3) },
-		"snake_scales": { "body": Color(0.2, 0.6, 0.3), "detail": Color(0.15, 0.5, 0.25) }
+		"snake_scales": { "body": Color(0.2, 0.6, 0.3), "detail": Color(0.15, 0.5, 0.25) },
+		"skeleton_neck": { "body": Color(0.75, 0.7, 0.55, 0), "detail": Color(0.65, 0.6, 0.45, 0) },
+		"skeleton_skull": { "body": Color(0.8, 0.75, 0.6, 0), "detail": Color(0.7, 0.65, 0.5, 0) },
+		"skeleton_arms": { "body": Color(0.7, 0.65, 0.5, 0), "detail": Color(0.6, 0.55, 0.4, 0) },
+		"skeleton_ribs": { "body": Color(0.78, 0.73, 0.6, 0), "detail": Color(0.68, 0.63, 0.5, 0) },
+		"skeleton_legs": { "body": Color(0.7, 0.65, 0.5, 0), "detail": Color(0.6, 0.55, 0.4, 0) },
+		"skeleton_tail": { "body": Color(0.82, 0.77, 0.65, 0), "detail": Color(0.72, 0.67, 0.55, 0) }
 	}
 	var pal: Dictionary = colors.get(item_id, colors["bottle_empty"])
 
@@ -80,21 +86,21 @@ func _build_sprite() -> void:
 	bg.size = Vector2(24, 32)
 	bg.position = Vector2(-12, -16)
 	bg.color = pal["body"]
-	bg.mouse_filter = 2
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(bg)
 
 	var detail := ColorRect.new()
 	detail.size = Vector2(14, 20)
 	detail.position = Vector2(-7, -10)
 	detail.color = pal["detail"]
-	detail.mouse_filter = 2
+	detail.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(detail)
 
 	var wgt := ColorRect.new()
 	wgt.size = Vector2(20, 3)
 	wgt.position = Vector2(-10, 17)
 	wgt.color = Color(0.4, 0.3, 0.2, 0.6)
-	wgt.mouse_filter = 2
+	wgt.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(wgt)
 
 	var wgt_fill := ColorRect.new()
@@ -102,11 +108,11 @@ func _build_sprite() -> void:
 	wgt_fill.size = Vector2(fill_w, 3)
 	wgt_fill.position = Vector2(-10, 17)
 	wgt_fill.color = Color(0.8, 0.7, 0.3, 0.8)
-	wgt_fill.mouse_filter = 2
+	wgt_fill.	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(wgt_fill)
 
 func _find_player() -> Node2D:
-	for room in ["DungeonLevel", "CaveLevel", "RoomLevel"]:
+	for room in ["DungeonLevel", "CaveLevel", "RoomLevel", "LibraryRoom"]:
 		var p := get_node_or_null("/root/Game/" + room + "/Player")
 		if p:
 			return p

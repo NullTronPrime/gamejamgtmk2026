@@ -28,10 +28,10 @@ func _ready() -> void:
 	_setup_ui()
 	reveal.call_deferred()
 
-func _r(x, y, w, h, col: Color) -> ColorRect:
+func _r(x, y, w, h, col: Color, z: int = 0) -> ColorRect:
 	var r := ColorRect.new()
 	r.position = Vector2(x, y); r.size = Vector2(w, h); r.color = col
-	r.mouse_filter = 2; return r
+	r.z_index = z; r.mouse_filter = Control.MOUSE_FILTER_IGNORE; return r
 
 func _solid(pos: Vector2, size: Vector2) -> void:
 	var s := StaticBody2D.new(); s.collision_layer = 1; s.position = pos
@@ -51,13 +51,13 @@ func _tex(path: String) -> Texture2D:
 func _hint(pos: Vector2, text: String, col: Color) -> Label:
 	var l := Label.new(); l.position = pos; l.text = text
 	l.add_theme_font_size_override("font_size", 10)
-	l.add_theme_color_override("font_color", col); l.mouse_filter = 2; return l
+	l.add_theme_color_override("font_color", col); l.mouse_filter = Control.MOUSE_FILTER_IGNORE; return l
 
 func _build_terrain() -> void:
 	var bg := ColorRect.new()
 	bg.color = Color(0.35, 0.55, 0.5)
 	bg.size = Vector2(80*TILE, 10*TILE)
-	bg.position = Vector2(0, 0); bg.z_index = -3; bg.mouse_filter = 2; add_child(bg)
+	bg.position = Vector2(0, 0); bg.z_index = -3; bg.mouse_filter = Control.MOUSE_FILTER_IGNORE; add_child(bg)
 
 	var lt := _tex("res://assets/art/rooms/wall_tile_light.png")
 	var dt := _tex("res://assets/art/rooms/wall_tile_dark.png")
@@ -118,7 +118,7 @@ func _build_stages() -> void:
 	add_child(_r(sx+75, 10*TILE - 14, 14, 8, Color(0.1, 0.4, 0.15)))
 	add_child(_r(sx+45, 10*TILE - 30, 3, 20, Color(0.5, 0.35, 0.15)))
 	add_child(_r(sx+56, 10*TILE - 42, 8, 6, Color(0.6, 0.6, 0.6)))
-	add_child(_hint(sx+20, 10*TILE - 52, "[Arrow]", Color(1, 1, 0.6, 0.7)))
+	add_child(_hint(Vector2(sx+20, 10*TILE - 52), "[Arrow]", Color(1, 1, 0.6, 0.7)))
 	var aa := _area(Vector2(sx+40, 10*TILE - 20), Vector2(100, 60), "ArrowArea")
 	aa.body_entered.connect(_on_near.bind("arrow")); add_child(aa)
 
@@ -126,7 +126,7 @@ func _build_stages() -> void:
 	add_child(_r(bx, 10*TILE - 24, 48, 48, Color(0.45, 0.4, 0.3)))
 	add_child(_r(bx+6, 10*TILE - 18, 36, 36, Color(0.55, 0.48, 0.36)))
 	_solid(Vector2(bx+24, 10*TILE), Vector2(48, 48))
-	add_child(_hint(bx-12, 10*TILE - 60, "[Push Boulder]", Color(0.8, 0.8, 0.7, 0.7)))
+	add_child(_hint(Vector2(bx-12, 10*TILE - 60), "[Push Boulder]", Color(0.8, 0.8, 0.7, 0.7)))
 
 	var px := 26*TILE
 	add_child(_r(px-24, 10*TILE - 6, 48, 6, Color(0.4, 0.35, 0.25)))
@@ -143,29 +143,29 @@ func _build_stages() -> void:
 	cv.position = Vector2(px-24, 10*TILE - 106)
 	cv.z_index = 1; add_child(cv)
 
-	add_child(_hint(px-24, 10*TILE - 130, "[Cage]", Color(0.8, 0.7, 0.3, 0.5)))
+	add_child(_hint(Vector2(px-24, 10*TILE - 130), "[Cage]", Color(0.8, 0.7, 0.3, 0.5)))
 
 	var la := _area(Vector2(px, 10*TILE - 90), Vector2(40, 30), "LetterArea")
 	la.body_entered.connect(_on_near.bind("letter")); la.monitoring = false; add_child(la)
-	add_child(_hint(px-28, 10*TILE - 130, "[Letter Inside]", Color(0.9, 0.9, 0.6, 0.0)))
+	add_child(_hint(Vector2(px-28, 10*TILE - 130), "[Letter Inside]", Color(0.9, 0.9, 0.6, 0.0)))
 
 	var fa := _area(Vector2(34*TILE, 10*TILE - 12), Vector2(TILE*4, 30), "FlowerArea")
 	fa.body_entered.connect(_on_near.bind("flower")); add_child(fa)
-	add_child(_hint(34*TILE - 30, 10*TILE - 40, "[Pick Flowers]", Color(0.9, 0.7, 0.2, 0.7)))
+	add_child(_hint(Vector2(34*TILE - 30, 10*TILE - 40), "[Pick Flowers]", Color(0.9, 0.7, 0.2, 0.7)))
 
 	_nest_pos = Vector2(48*TILE, 10*TILE - 18)
 	add_child(_r(_nest_pos.x - 18, _nest_pos.y - 6, 36, 12, Color(0.35, 0.25, 0.12)))
 	add_child(_r(_nest_pos.x - 12, _nest_pos.y - 4, 24, 8, Color(0.25, 0.18, 0.08)))
 	var na := _area(_nest_pos, Vector2(50, 30), "NestArea")
 	na.monitoring = false; na.body_entered.connect(_on_near.bind("nest")); add_child(na)
-	add_child(_hint(_nest_pos.x - 18, _nest_pos.y - 28, "[Nest]", Color(0.8, 0.7, 0.3, 0.5)))
+	add_child(_hint(Vector2(_nest_pos.x - 18, _nest_pos.y - 28), "[Nest]", Color(0.8, 0.7, 0.3, 0.5)))
 
 	var np := Label.new()
 	np.name = "NestProgress"
 	np.text = "Snakes: 0/3"
 	np.add_theme_font_size_override("font_size", 8)
 	np.add_theme_color_override("font_color", Color(0.9, 0.8, 0.3, 0.6))
-	np.position = _nest_pos - Vector2(22, -8); np.mouse_filter = 2; add_child(np)
+	np.position = _nest_pos - Vector2(22, -8); np.mouse_filter = Control.MOUSE_FILTER_IGNORE; add_child(np)
 
 	var mv := ColorRect.new()
 	mv.name = "MilkVisual"
@@ -195,7 +195,7 @@ func _build_stages() -> void:
 	add_child(_r(yx-12, yy-24, 24, 8, Color(0.15, 0.1, 0.05)))
 	add_child(_r(yx-9, yy-22, 18, 3, Color(0.35, 0.2, 0.08)))
 	add_child(_r(yx-9, yy-20, 18, 3, Color(0.3, 0.18, 0.06)))
-	add_child(_hint(yx-24, yy-60, "[Light Yajna Fire]", Color(0.9, 0.5, 0.2, 0.7)))
+	add_child(_hint(Vector2(yx-24, yy-60), "[Light Yajna Fire]", Color(0.9, 0.5, 0.2, 0.7)))
 	var ya := _area(Vector2(yx, yy-16), Vector2(80, 60), "YajnaArea")
 	ya.body_entered.connect(_on_near.bind("yajna")); add_child(ya)
 
@@ -223,7 +223,7 @@ func _setup_ui() -> void:
 	_stage_hint.add_theme_color_override("font_color", Color(0.8, 0.8, 0.7, 0.6))
 	_stage_hint.anchor_left = 0.5; _stage_hint.anchor_top = 0.0
 	_stage_hint.anchor_right = 0.5; _stage_hint.anchor_bottom = 0.0
-	_stage_hint.position = Vector2(-120, 60); _stage_hint.mouse_filter = 2
+	_stage_hint.position = Vector2(-120, 60); _stage_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_stage_hint)
 
 func _on_near(body: Node, id: String) -> void:

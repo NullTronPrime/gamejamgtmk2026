@@ -92,7 +92,10 @@ func _draw() -> void:
 			if data.has(id):
 				var d = data[id]
 				var icon_rect = Rect2(sx + 4, sy + 4, GameInventory.SLOT_SIZE - 8, GameInventory.SLOT_SIZE - 8)
-				draw_rect(icon_rect, d["icon"])
+				if d.has("icon_texture") and d["icon_texture"]:
+					draw_texture_rect(d["icon_texture"], icon_rect, false)
+				else:
+					draw_rect(icon_rect, d["icon"])
 				var label = d["name"] if int(entry["qty"]) <= 1 else "%s x%d" % [d["name"], entry["qty"]]
 				draw_string(ThemeDB.fallback_font, Vector2(sx + 3, sy + GameInventory.SLOT_SIZE - 3), label,
 					HORIZONTAL_ALIGNMENT_LEFT, GameInventory.SLOT_SIZE - 6, 8, Color.WHITE)
