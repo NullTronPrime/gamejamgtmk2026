@@ -214,13 +214,13 @@ func _build_stages() -> void:
 	var ma := _area(_nest_pos + Vector2(0, 12), Vector2(40, 30), "MilkArea")
 	ma.monitoring = false; ma.body_entered.connect(_on_near.bind("milk")); add_child(ma)
 
-	var hid_positions := [
+	var hid_positions: Array[Vector2] = [
 		Vector2(42*TILE, 8*TILE + 8),
 		Vector2(54*TILE, 8*TILE + 8),
 		Vector2(48*TILE, 7*TILE + 4),
 	]
 	for i in 3:
-		var hp := hid_positions[i]
+		var hp: Vector2 = hid_positions[i]
 		var plat_w := 56; var plat_h := 8
 		add_child(_r(hp.x - plat_w/2, hp.y, plat_w, plat_h, Color(0.3, 0.28, 0.22)))
 		add_child(_r(hp.x - plat_w/2 + 2, hp.y - 4, plat_w - 4, plat_h - 2, Color(0.35, 0.32, 0.25)))
@@ -363,7 +363,7 @@ func _show_prompt(text: String) -> void:
 	l.position = Vector2(20, 20); l.z_index = 10; add_child(l)
 	var tw = create_tween()
 	tw.tween_property(l, "modulate:a", 0.0, 3.0).set_delay(2.5)
-	await tw.finished; l.queue_free()
+	tw.finished.connect(l.queue_free)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
@@ -431,9 +431,40 @@ func _exit_room() -> void:
 	if g and g.has_method("exit_hunting_grounds"): g.exit_hunting_grounds()
 	else: queue_free()
 
+func _show_vn_dialogue(title: String, text: String, duration: float) -> void:
+	var vs := DisplayServer.window_get_size()
+	var vn_layer := CanvasLayer.new()
+	vn_layer.layer = 25; vn_layer.name = "VNDialogue"; add_child(vn_layer)
+	var vn_box := ColorRect.new()
+	vn_box.color = Color(0.05, 0.05, 0.1, 0.9)
+	vn_box.position = Vector2(20, vs.y - 220)
+	vn_box.size = Vector2(vs.x - 40, 200)
+	vn_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vn_layer.add_child(vn_box)
+	var vn_name := Label.new()
+	vn_name.text = title
+	vn_name.add_theme_font_size_override("font_size", 20)
+	vn_name.add_theme_color_override("font_color", Color(0.6, 0.7, 1, 1))
+	vn_name.position = Vector2(40, vs.y - 210)
+	vn_name.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vn_layer.add_child(vn_name)
+	var vn_text := Label.new()
+	vn_text.text = text
+	vn_text.add_theme_font_size_override("font_size", 16)
+	vn_text.add_theme_color_override("font_color", Color(0.9, 0.9, 0.85, 1))
+	vn_text.position = Vector2(40, vs.y - 180)
+	vn_text.size = Vector2(vs.x - 80, 150)
+	vn_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vn_text.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vn_layer.add_child(vn_text)
+	await get_tree().create_timer(duration).timeout
+	vn_layer.queue_free()
+
 func reveal() -> void:
 	if GridTrans.is_available() and not GridTrans.is_busy(): await GridTrans.reveal(0.8)
 	_can_move = true
+	await _show_vn_dialogue("Betaal", "Well, I believe we could play some games to pass the time...", 3.0)
+	_show_vn_dialogue("Betaal", "O Mighty Rajan, here are one of my stories!", 3.0)
 
 func _physics_process(delta: float) -> void:
 	if not _can_move or not _player: return

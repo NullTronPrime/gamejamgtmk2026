@@ -13,6 +13,9 @@ var library_room: Node2D
 var hunting_grounds: Node2D
 
 func _ready() -> void:
+	var cs := SystemFont.new()
+	cs.font_names = ["Comic Sans MS", "Comic Sans"]
+	ThemeDB.fallback_font = cs
 	_show_title()
 
 func _show_title() -> void:

@@ -291,8 +291,8 @@ class RockDraw extends Node2D:
 		draw_colored_polygon(h_points, highlight)
 
 
-const LEVEL_WIDTH = 8000
-const GROUND_Y := 480.0
+const LEVEL_WIDTH := 3200.0
+const GROUND_Y := 810.0
 
 var player_scene: PackedScene
 var player_instance: CharacterBody2D
@@ -304,24 +304,12 @@ var reset_cutscene: CanvasLayer
 var current_riddle_data: Dictionary
 var current_shuffled_options: Array[Dictionary]
 var is_waiting_for_response: bool = false
-var _generated_chunk_min: int = -25
-var _generated_chunk_max: int = 25
-var _chunk_idx_counter: int = 500
-const CHUNK_SIZE: float = 400.0
-const GENERATE_AHEAD: int = 6
+var _prop_idx_counter: int = 500
 var environment: EnvironmentTracker
 var observation: ObservationTracker
 var _observation_scan_timer: float = 0.0
-var _chunk_gen_timer: float = 0.0
 var _parallax_layers: Array[Dictionary] = []
 
-var crossroad_markers: Array[Node2D] = []
-var completed_crossroads: Array[int] = []
-var crossroad_count: int = 6
-var crossroad_spacing: float = 2000.0
-var crossroad_start_x: float = 1200.0
-var current_crossroad_index: int = 0
-var _crossroad_enabled: Array[bool] = []
 var day_night_cycle_time: float = 0.0
 var _moonlight_node: Node
 var _ambient_node: Node
@@ -349,6 +337,7 @@ func _ready() -> void:
 	environment = EnvironmentTracker.new()
 	observation = ObservationTracker.new()
 	_build_terrain()
+	_build_boundary_walls()
 	_generate_forest()
 	_add_leaf_particles()
 	_add_leaf_litter()
@@ -376,9 +365,7 @@ func _ready() -> void:
 	if ambience_stream:
 		AudioManager.play_ambience(ambience_stream)
 	_setup_lighting()
-	_load_crossroad_config()
 	_build_skybox()
-	_setup_crossroads()
 	if get_tree().root.has_node("Transition"):
 		Transition.add_style("spiral", {"shader": "spiral_wipe.gdshader", "flip": false})
 	var st := SpiralTransition.new()
@@ -406,6 +393,7 @@ func _setup_phantom_camera() -> void:
 	_follow_pcam.follow_mode = PhantomCamera2D.FollowMode.SIMPLE
 	_follow_pcam.follow_damping = true
 	_follow_pcam.follow_damping_value = Vector2(0.08, 0.08)
+	_follow_pcam.follow_offset = Vector2(0, -120)
 	_follow_pcam.zoom = Vector2.ONE
 	_follow_pcam.tween_resource = tween_res
 	add_child(_follow_pcam)
@@ -419,17 +407,10 @@ func _setup_phantom_camera() -> void:
 	add_child(_puzzle_pcam)
 
 func _on_save_requested(data: Dictionary) -> void:
-	data.completed_crossroads = completed_crossroads.duplicate()
-	data.current_crossroad_index = current_crossroad_index
 	data.day_night_cycle_time = day_night_cycle_time
-	data.crossroad_enabled = _crossroad_enabled.duplicate()
 
 func _on_load_completed(data: Dictionary) -> void:
-	completed_crossroads = data.get("completed_crossroads", []).duplicate()
-	current_crossroad_index = data.get("current_crossroad_index", 0)
 	day_night_cycle_time = data.get("day_night_cycle_time", 0.0)
-	if data.has("crossroad_enabled"):
-		_crossroad_enabled = data.get("crossroad_enabled", []).duplicate()
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.keycode == KEY_I and event.pressed and not event.echo:
@@ -453,15 +434,6 @@ func _process(delta: float) -> void:
 	if _observation_scan_timer >= 0.5 and player_instance:
 		_observation_scan_timer = 0.0
 		observation.scan_nearby(player_instance.position, _game_time)
-	if player_instance and GameManager.state == GameManager.GameState.PLAYING:
-		var dist = abs(player_instance.position.x)
-		if dist > GameManager.max_distance:
-			GameManager.max_distance = dist
-	if player_instance:
-		_chunk_gen_timer -= delta
-		if _chunk_gen_timer <= 0.0:
-			_generate_props_ahead()
-			_chunk_gen_timer = 0.15
 	if player_instance and not _parallax_layers.is_empty():
 		var px = player_instance.position.x
 		for l in _parallax_layers:
@@ -470,23 +442,46 @@ func _process(delta: float) -> void:
 	_animate_lights(delta)
 
 func _build_terrain() -> void:
-	var TERRAIN_HALF = 50000
+	var half := LEVEL_WIDTH * 0.5
 
-	var ground = ColorRect.new()
-	ground.name = "Ground"
-	ground.offset_left = -TERRAIN_HALF
-	ground.offset_top = 0
-	ground.size = Vector2(TERRAIN_HALF * 2, 600)
-	ground.color = Color(0.12, 0.08, 0.04)
-	add_child(ground)
+	var ground_vis = ColorRect.new()
+	ground_vis.name = "Ground"
+	ground_vis.offset_left = -half
+	ground_vis.offset_top = GROUND_Y
+	ground_vis.size = Vector2(LEVEL_WIDTH, 300)
+	ground_vis.color = Color(0.12, 0.08, 0.04)
+	add_child(ground_vis)
 
 	var grass_top = ColorRect.new()
 	grass_top.name = "GrassTop"
-	grass_top.offset_left = -TERRAIN_HALF
-	grass_top.offset_top = 0
-	grass_top.size = Vector2(TERRAIN_HALF * 2, 8)
+	grass_top.offset_left = -half
+	grass_top.offset_top = GROUND_Y - 4
+	grass_top.size = Vector2(LEVEL_WIDTH, 8)
 	grass_top.color = Color(0.08, 0.18, 0.06)
 	add_child(grass_top)
+
+	var floor_body = StaticBody2D.new()
+	floor_body.name = "FloorCollision"
+	var floor_shape = CollisionShape2D.new()
+	var floor_rect = RectangleShape2D.new()
+	floor_rect.size = Vector2(LEVEL_WIDTH, 20)
+	floor_shape.shape = floor_rect
+	floor_shape.position = Vector2(0, GROUND_Y + 10)
+	floor_body.add_child(floor_shape)
+	add_child(floor_body)
+
+func _build_boundary_walls() -> void:
+	var half := LEVEL_WIDTH * 0.5
+	for side in [-1, 1]:
+		var wall = StaticBody2D.new()
+		wall.name = "Wall_%s" % ("Left" if side < 0 else "Right")
+		var wall_shape = CollisionShape2D.new()
+		var wall_rect = RectangleShape2D.new()
+		wall_rect.size = Vector2(20, 600)
+		wall_shape.shape = wall_rect
+		wall_shape.position = Vector2(side * half, GROUND_Y + 100)
+		wall.add_child(wall_shape)
+		add_child(wall)
 
 func set_backgrounds_visible(v: bool) -> void:
 	if _skybox_layer:
@@ -501,15 +496,15 @@ func _build_skybox() -> void:
 	_skybox_height = max(ws.y, 720)
 
 	_skybox_layer = CanvasLayer.new()
-	_skybox_layer.layer = -8
-	_skybox_layer.offset = Vector2(0, 1)
+	_skybox_layer.layer = -12
 	add_child(_skybox_layer)
 
 	var sky_tex := preload("res://assets/forest/sky_bg.png")
 	var sky_rect := TextureRect.new()
 	sky_rect.texture = sky_tex
 	sky_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	sky_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	sky_rect.position = Vector2(0, 0)
+	sky_rect.size = Vector2(ws.x, GROUND_Y)
 	_skybox_layer.add_child(sky_rect)
 
 	_add_parallax_backdrop()
@@ -517,13 +512,13 @@ func _build_skybox() -> void:
 func _add_parallax_backdrop() -> void:
 	var pl := CanvasLayer.new()
 	pl.name = "ParallaxBackdrop"
-	pl.layer = -10
+	pl.layer = -8
 	add_child(pl)
 
 	var layers = [
-		{ "tex": "tree_light_grey.png", "factor": 0.02, "scale": 0.15 },
-		{ "tex": "medium_grey_tree.png", "factor": 0.06, "scale": 0.20, "variant": "medium_grey_tree_two.png" },
-		{ "tex": "Dark_Tree.png", "factor": 0.14, "scale": 0.25, "variant": "Dark_Tree_two.png" },
+		{ "tex": "tree_light_grey.png", "factor": 0.02, "scale": 1.2 },
+		{ "tex": "medium_grey_tree.png", "factor": 0.06, "scale": 1.0, "variant": "medium_grey_tree_two.png" },
+		{ "tex": "Dark_Tree.png", "factor": 0.14, "scale": 0.8, "variant": "Dark_Tree_two.png" },
 	]
 	_parallax_layers.clear()
 	var vs = DisplayServer.window_get_size()
@@ -537,7 +532,7 @@ func _add_parallax_backdrop() -> void:
 			variant_tex = load("res://assets/sprites/background/" + l["variant"])
 		var sw = tex.get_size().x * l["scale"]
 		var sh = tex.get_size().y * l["scale"]
-		var base_y = vs.y * 0.4 - sh
+		var base_y = GROUND_Y - sh
 		for i in range(count):
 			var tex_to_use = tex
 			if variant_tex and randi() % 2 == 0:
@@ -554,38 +549,24 @@ func _generate_forest() -> void:
 	var props = Node2D.new()
 	props.name = "ForestProps"
 	add_child(props)
-	_generated_chunk_min = -3
-	_generated_chunk_max = 3
-	_chunk_idx_counter = 500
-	for ci in range(_generated_chunk_min, _generated_chunk_max + 1):
-		_generate_chunk(ci)
-
-func _generate_chunk(ci: int) -> void:
-	var props = get_node_or_null("ForestProps")
-	if not props:
-		return
 	var rng = RandomNumberGenerator.new()
-	rng.seed = hash("flat_forest_%d" % ci)
-	var cx = ci * CHUNK_SIZE
-
-	var giant_chance = rng.randf()
-	if giant_chance < 0.10:
-		var gx = cx + rng.randf_range(-200, 200)
-		var gy = GROUND_Y - rng.randf_range(50, 150)
-		_chunk_idx_counter += 1
+	rng.seed = hash("forest_seed")
+	var half := LEVEL_WIDTH * 0.5 - 100
+	for i in range(40):
+		var gx = rng.randf_range(-half, half)
+		var gy = GROUND_Y
+		_prop_idx_counter += 1
 		var giant_w = rng.randf_range(100, 150)
 		var giant_h = rng.randf_range(550, 800)
 		var giant_variant = rng.randi() % 3
-		_build_tree(props, "GiantTree_%d" % _chunk_idx_counter, gx, gy, Color(0.12, 0.35, 0.08), giant_w, giant_h, giant_variant, rng.randf_range(-3.0, 3.0))
-		environment.register_tree("GiantTree_%d" % _chunk_idx_counter, gx, gy, 1.0)
-		observation.register_object("GiantTree_%d" % _chunk_idx_counter, Vector2(gx, gy), "tree")
+		_build_tree(props, "GiantTree_%d" % _prop_idx_counter, gx, gy, Color(0.12, 0.35, 0.08), giant_w, giant_h, giant_variant, rng.randf_range(-3.0, 3.0))
+		environment.register_tree("GiantTree_%d" % _prop_idx_counter, gx, gy, 1.0)
+		observation.register_object("GiantTree_%d" % _prop_idx_counter, Vector2(gx, gy), "tree")
 
-	var tree_count = rng.randi_range(1, 2)
+	var tree_count = rng.randi_range(20, 30)
 	for i in tree_count:
-		var side = 1.0 if rng.randi() % 2 == 0 else -1.0
-		var dist = rng.randf_range(100, 350)
-		var tx = cx + side * dist
-		var ty = GROUND_Y - rng.randf_range(80, 200)
+		var tx = rng.randf_range(-half, half)
+		var ty = GROUND_Y
 		var th = rng.randf_range(150, 450)
 		var tw = rng.randf_range(35, 90)
 		var variant = rng.randi() % 5
@@ -601,57 +582,46 @@ func _generate_chunk(ci: int) -> void:
 		else:
 			leaf_color = special_palette[rng.randi() % special_palette.size()]
 		var tilt = rng.randf_range(-8.0, 8.0)
-		_chunk_idx_counter += 1
-		var tree_name = "Tree_%d" % _chunk_idx_counter
+		_prop_idx_counter += 1
+		var tree_name = "Tree_%d" % _prop_idx_counter
 		_build_tree(props, tree_name, tx, ty, leaf_color, tw, th, variant, tilt)
 		environment.register_tree(tree_name, tx, ty, 1.0)
 		observation.register_object(tree_name, Vector2(tx, ty), "tree")
 
-	var bush_count = rng.randi_range(0, 1)
+	var bush_count = rng.randi_range(10, 15)
 	for i in bush_count:
 		var bw = rng.randf_range(25, 45)
 		var bh = rng.randf_range(18, 35)
-		var bx = cx + rng.randf_range(-350, 350)
+		var bx = rng.randf_range(-half, half)
 		var by = GROUND_Y + 10
-		_chunk_idx_counter += 1
-		var bush_name = "Bush_%d" % _chunk_idx_counter
+		_prop_idx_counter += 1
+		var bush_name = "Bush_%d" % _prop_idx_counter
 		_build_rect_prop(props, bush_name, bx, by, Color(0.1, 0.3, 0.08), bw, bh)
 		environment.register_bush(bush_name)
 		observation.register_object(bush_name, Vector2(bx, by), "bush")
 
-	var rock_count = rng.randi_range(0, 1)
+	var rock_count = rng.randi_range(5, 10)
 	for i in rock_count:
 		var rs = rng.randf_range(12, 30)
-		var rx = cx + rng.randf_range(-350, 350)
+		var rx = rng.randf_range(-half, half)
 		var ry = GROUND_Y + 8
-		_chunk_idx_counter += 1
-		var rock_name = "Rock_%d" % _chunk_idx_counter
+		_prop_idx_counter += 1
+		var rock_name = "Rock_%d" % _prop_idx_counter
 		_build_rect_prop(props, rock_name, rx, ry, Color(0.25, 0.22, 0.18), rs, rs * 0.5)
 		environment.register_rock(rock_name, rx)
 		observation.register_object(rock_name, Vector2(rx, ry), "rock")
-	
-	var shrub_count = rng.randi_range(0, 1)
+
+	var shrub_count = rng.randi_range(8, 12)
 	for i in shrub_count:
 		var sw = rng.randf_range(12, 22)
 		var sh = rng.randf_range(10, 18)
-		var sx = cx + rng.randf_range(-250, 250)
+		var sx = rng.randf_range(-half, half)
 		var sy = GROUND_Y + 10
-		_chunk_idx_counter += 1
-		var shrub_name = "Shrub_%d" % _chunk_idx_counter
+		_prop_idx_counter += 1
+		var shrub_name = "Shrub_%d" % _prop_idx_counter
 		_build_rect_prop(props, shrub_name, sx, sy, Color(0.08, 0.22, 0.06), sw, sh)
 		environment.register_bush(shrub_name)
 		observation.register_object(shrub_name, Vector2(sx, sy), "bush")
-
-func _generate_props_ahead() -> void:
-	if not player_instance:
-		return
-	var player_chunk = int(floor(player_instance.position.x / CHUNK_SIZE))
-	if player_chunk + GENERATE_AHEAD > _generated_chunk_max:
-		_generated_chunk_max += 1
-		_generate_chunk(_generated_chunk_max)
-	elif player_chunk - GENERATE_AHEAD < _generated_chunk_min:
-		_generated_chunk_min -= 1
-		_generate_chunk(_generated_chunk_min)
 
 func _build_tree(parent: Node2D, tree_name: String, x: float, y: float, color: Color, w: float, h: float, variant: int = 0, tilt: float = 0.0) -> void:
 	var node = Node2D.new()
@@ -730,16 +700,6 @@ func _build_tree(parent: Node2D, tree_name: String, x: float, y: float, color: C
 
 	node.add_child(tree)
 
-	var body = StaticBody2D.new()
-	body.name = "Collision"
-	var shape = CollisionShape2D.new()
-	var rect = RectangleShape2D.new()
-	rect.size = Vector2(w * 0.3, h * 0.15)
-	shape.shape = rect
-	shape.position = Vector2(0, -h * 0.05)
-	body.add_child(shape)
-	node.add_child(body)
-
 	_make_lit(tree)
 	parent.add_child(node)
 
@@ -764,16 +724,6 @@ func _build_rect_prop(parent: Node2D, prop_name: String, x: float, y: float, col
 		rock_draw.offset_y = -h
 		node.add_child(rock_draw)
 		_make_lit(rock_draw)
-
-	var body = StaticBody2D.new()
-	body.name = "Collision"
-	var shape = CollisionShape2D.new()
-	var rect = RectangleShape2D.new()
-	rect.size = Vector2(w * 0.6, h * 0.4)
-	shape.shape = rect
-	shape.position = Vector2(0, -h * 0.3)
-	body.add_child(shape)
-	node.add_child(body)
 
 	parent.add_child(node)
 
@@ -926,7 +876,7 @@ func _spawn_player() -> void:
 	if player_instance:
 		return
 	player_instance = player_scene.instantiate()
-	player_instance.position = player_start.position
+	player_instance.position = Vector2(player_start.position.x, GROUND_Y - 28)
 	add_child(player_instance)
 	if _follow_pcam:
 		_follow_pcam.follow_target = player_instance
@@ -938,27 +888,6 @@ func _on_puzzle_timer_timeout() -> void:
 		return
 	_trigger_betaal_riddle()
 
-func _on_crossroad_trigger_entered(body: Node2D, crossroad_idx: int) -> void:
-	if body != player_instance:
-		return
-	if crossroad_idx != current_crossroad_index:
-		return
-	if is_waiting_for_response:
-		return
-	if GameManager.state != GameManager.GameState.PLAYING:
-		return
-	if completed_crossroads.has(crossroad_idx):
-		return
-	if not _is_crossroad_enabled(crossroad_idx):
-		return
-	var marker_node = crossroad_markers[crossroad_idx] if crossroad_idx < crossroad_markers.size() else null
-	if not marker_node:
-		return
-	var trigger_node = marker_node.get_node_or_null("CenterDot")
-	if trigger_node:
-		trigger_node.set_deferred("monitoring", false)
-	_trigger_betaal_riddle()
-
 func _trigger_betaal_riddle() -> void:
 	is_waiting_for_response = true
 	_inject_environment_questions()
@@ -967,14 +896,6 @@ func _trigger_betaal_riddle() -> void:
 		is_waiting_for_response = false
 		return
 
-	if current_crossroad_index < crossroad_markers.size():
-		var mk = crossroad_markers[current_crossroad_index]
-		if mk:
-			mk.modulate = Color(1, 1, 1, 0)
-			mk.visible = true
-			var reveal = create_tween()
-			reveal.tween_property(mk, "modulate", Color(1, 1, 1, 1), 0.6).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
-
 	GameManager.trigger_puzzle()
 	GameManager.puzzle_type_changed.emit(current_riddle_data.get("puzzle_type", 0))
 	if player_instance:
@@ -982,8 +903,7 @@ func _trigger_betaal_riddle() -> void:
 		if betaal and betaal.has_method("start_speaking"):
 			betaal.start_speaking()
 		if _puzzle_pcam:
-			var crossroad_pos = _get_crossroad_position(current_crossroad_index)
-			_puzzle_pcam.position = crossroad_pos
+			_puzzle_pcam.position = player_instance.position
 			_puzzle_pcam.priority = 10
 		if _follow_pcam:
 			_follow_pcam.follow_target = player_instance
@@ -1123,8 +1043,9 @@ func _add_leaf_litter() -> void:
 	var forest = get_node_or_null("ForestProps")
 	if not forest:
 		return
+	var half := LEVEL_WIDTH * 0.5
 	for i in 30:
-		var x = randi_range(-1600, 1600)
+		var x = randf_range(-half, half)
 		var y = randi_range(50, 550)
 		var leaf = Sprite2D.new()
 		leaf.texture = leaf_texture
@@ -1144,210 +1065,6 @@ func _add_leaf_litter() -> void:
 		leaf.z_index = 0 if randi() % 2 == 0 else -1
 		forest.add_child(leaf)
 		_make_lit(leaf)
-
-func _get_crossroad_position(idx: int) -> Vector2:
-	return Vector2(crossroad_start_x + idx * crossroad_spacing, 300.0)
-
-func _load_crossroad_config() -> void:
-	var path = "res://config/crossroads.json"
-	var file = FileAccess.open(path, FileAccess.READ)
-	if file:
-		var json_string = file.get_as_text()
-		var parsed = JSON.parse_string(json_string)
-		if parsed is Dictionary and parsed.has("crossroads"):
-			var arr = parsed["crossroads"] as Array
-			_crossroad_enabled.resize(crossroad_count)
-			for entry in arr:
-				if entry is Dictionary and entry.has("index"):
-					var idx = int(entry["index"])
-					if idx >= 0 and idx < crossroad_count:
-						_crossroad_enabled[idx] = bool(entry.get("enabled", false))
-	file.close()
-
-func _is_crossroad_enabled(idx: int) -> bool:
-	if idx < 0 or idx >= _crossroad_enabled.size():
-		return true
-	return _crossroad_enabled[idx]
-
-func _setup_crossroads() -> void:
-	for i in range(crossroad_count):
-		if _is_crossroad_enabled(i):
-			_generate_crossroad(i)
-			return
-
-func _generate_crossroad(idx: int) -> void:
-	if idx >= crossroad_count:
-		return
-	if idx < crossroad_markers.size():
-		return
-
-	if not _is_crossroad_enabled(idx):
-		crossroad_markers.append(null)
-		return
-
-	var p = _get_crossroad_position(idx)
-	var cy = p.y
-	var cx = p.x
-
-	var marker = Node2D.new()
-	marker.name = "Crossroad_%d" % idx
-	marker.position = Vector2(0, 0)
-	marker.visible = false
-	add_child(marker)
-
-	var stripe_count = 40
-	var road_max_y = 600.0
-	var dark_col = Color(0.02, 0.015, 0.01, 0.8)
-	var dark_fork = Color(0.015, 0.025, 0.01, 0.85)
-
-	for i in range(stripe_count):
-		var t = float(i) / float(stripe_count - 1)
-		var y = t * road_max_y
-		var path_w = lerp(200.0, 800.0, t)
-		var rcx = cx
-
-		if y >= cy:
-			var stripe = ColorRect.new()
-			stripe.size = Vector2(path_w, 2)
-			stripe.color = dark_col
-			stripe.position = Vector2(rcx - path_w / 2, y - 1)
-			marker.add_child(stripe)
-		else:
-			var depth_t = 1.0 - y / max(cy, 1.0)
-			var spread = lerp(40.0, 220.0, depth_t)
-			var arm_w = lerp(180.0, 50.0, depth_t)
-
-			var left = ColorRect.new()
-			left.size = Vector2(arm_w, 2)
-			left.color = dark_fork
-			left.position = Vector2(rcx - arm_w - spread, y - 1)
-			marker.add_child(left)
-
-			var right = ColorRect.new()
-			right.size = Vector2(arm_w, 2)
-			right.color = dark_fork
-			right.position = Vector2(rcx + spread, y - 1)
-			marker.add_child(right)
-
-	var t_cy = cy / road_max_y
-	var trigger = Area2D.new()
-	trigger.name = "CenterDot"
-	trigger.position = Vector2(cx, cy)
-
-	var dot_visual = ColorRect.new()
-	dot_visual.name = "DotVisual"
-	dot_visual.size = Vector2(16, 16)
-	dot_visual.color = Color(0.6, 0.2, 0.15, 0.95)
-	dot_visual.position = Vector2(-8, -8)
-	trigger.add_child(dot_visual)
-
-	var band_collision = CollisionShape2D.new()
-	var band_shape = RectangleShape2D.new()
-	band_shape.size = Vector2(800, 600)
-	band_collision.shape = band_shape
-	band_collision.position = Vector2(0, 300 - cy)
-	trigger.add_child(band_collision)
-
-	trigger.collision_mask = 1
-	trigger.body_entered.connect(_on_crossroad_trigger_entered.bind(idx))
-
-	var band_debug = ColorRect.new()
-	band_debug.size = Vector2(800, 600)
-	band_debug.color = Color(1, 0, 0, 0.05)
-	band_debug.position = Vector2(-400, -cy)
-	trigger.add_child(band_debug)
-
-	marker.add_child(trigger)
-
-	var label = Label.new()
-	label.name = "ForkLabel"
-	label.text = "%d" % (idx + 1)
-	label.add_theme_font_size_override("font_size", 20)
-	label.add_theme_color_override("font_color", Color(0.95, 0.95, 0.8, 1))
-	label.position = Vector2(cx - 10, cy + 10)
-	label.z_index = 2
-	marker.add_child(label)
-
-	var glow = ColorRect.new()
-	glow.name = "Glow"
-	glow.size = Vector2(800, 600)
-	glow.color = Color(0.3, 0.05, 0.05, 0.06)
-	glow.position = Vector2(cx - 400, 0)
-	glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	marker.add_child(glow)
-	marker.move_child(glow, 0)
-
-	crossroad_markers.append(marker)
-
-func _light_crossroad(outcome_difficulty: int) -> void:
-	var idx = current_crossroad_index - 1
-	if idx < 0 or idx >= crossroad_markers.size():
-		return
-	var marker = crossroad_markers[idx]
-	if not marker:
-		return
-	var center_dot = marker.get_node_or_null("CenterDot")
-	if not center_dot:
-		return
-	var dot_visual = center_dot.get_node_or_null("DotVisual")
-	if not dot_visual:
-		return
-
-	var lit_color: Color
-	var glow_color: Color
-	var cp = _get_crossroad_position(idx)
-	match outcome_difficulty:
-		RiddleManager.LevelDifficulty.EASY:
-			lit_color = Color(0.1, 0.95, 0.15, 1.0)
-			glow_color = Color(0.05, 0.9, 0.1, 0.5)
-		RiddleManager.LevelDifficulty.HARD:
-			lit_color = Color(0.95, 0.1, 0.1, 1.0)
-			glow_color = Color(0.9, 0.05, 0.05, 0.5)
-		RiddleManager.LevelDifficulty.NORMAL:
-			lit_color = Color(0.95, 0.7, 0.05, 1.0)
-			glow_color = Color(0.9, 0.6, 0.05, 0.5)
-
-	dot_visual.color = lit_color
-	for child in marker.get_children():
-		if child.name == "Glow" or child.name == "ForkLabel":
-			continue
-		if child is ColorRect:
-			child.color = lit_color
-
-	var existing_glow = marker.get_node_or_null("Glow")
-	if existing_glow:
-		existing_glow.queue_free()
-	var new_glow = ColorRect.new()
-	new_glow.name = "Glow"
-	new_glow.size = Vector2(500, 700)
-	new_glow.color = glow_color
-	new_glow.position = Vector2(cp.x - 250, cp.y - 300)
-	new_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	marker.add_child(new_glow)
-	marker.move_child(new_glow, 0)
-
-func _mark_crossroad_completed() -> void:
-	if current_crossroad_index >= crossroad_count:
-		return
-	if current_crossroad_index < crossroad_markers.size():
-		var marker = crossroad_markers[current_crossroad_index]
-		if marker:
-			var center_dot = marker.get_node_or_null("CenterDot")
-			var dot_visual = center_dot.get_node_or_null("DotVisual") if center_dot else null
-			if dot_visual:
-				dot_visual.color = Color(0.15, 0.85, 0.15, 0.95)
-			for child in marker.get_children():
-				if child.name == "Glow" or child.name == "ForkLabel":
-					continue
-				if child is ColorRect:
-					child.color = Color(0.2, 0.7, 0.15, 0.6)
-	completed_crossroads.append(current_crossroad_index)
-	current_crossroad_index += 1
-	while current_crossroad_index < crossroad_count and not _is_crossroad_enabled(current_crossroad_index):
-		completed_crossroads.append(current_crossroad_index)
-		current_crossroad_index += 1
-	_generate_crossroad(current_crossroad_index)
-	GameManager.save_game()
 
 func _update_day_night(delta: float) -> void:
 	if not _moonlight_node:
@@ -1453,18 +1170,19 @@ func _add_gravestones() -> void:
 	for i in 2:
 		var area := Area2D.new()
 		area.name = "Gravestone_%d" % i
-		var x_pos = 300.0 + i * 200.0
-		area.position = Vector2(x_pos, GROUND_Y - 20)
+		var x_pos = -200.0 + i * 400.0
+		var gs := 0.125
+		area.position = Vector2(x_pos, GROUND_Y - gravestone_tex.get_size().y * gs * 0.5)
 
 		var sprite := Sprite2D.new()
 		sprite.texture = gravestone_tex
-		sprite.scale = Vector2(0.5, 0.5)
+		sprite.scale = Vector2(gs, gs)
 		sprite.centered = true
 		area.add_child(sprite)
 
 		var shape := CollisionShape2D.new()
 		var rect := RectangleShape2D.new()
-		rect.size = sprite.texture.get_size() * 0.5
+		rect.size = gravestone_tex.get_size() * gs
 		shape.shape = rect
 		area.add_child(shape)
 
@@ -1473,7 +1191,7 @@ func _add_gravestones() -> void:
 		prompt.text = "Press E" if i == 0 else "Press E"
 		prompt.add_theme_font_size_override("font_size", 14)
 		prompt.add_theme_color_override("font_color", Color(1, 1, 0.8, 0.9))
-		prompt.position = Vector2(-40, -sprite.texture.get_size().y * 0.3)
+		prompt.position = Vector2(-40, -gravestone_tex.get_size().y * gs)
 		prompt.visible = false
 		area.add_child(prompt)
 
@@ -1508,12 +1226,76 @@ func _show_prompt(text: String) -> void:
 	l.position = Vector2(20, 20); l.z_index = 10; add_child(l)
 	var tw := create_tween()
 	tw.tween_property(l, "modulate:a", 0.0, 3.0).set_delay(2.5)
-	await tw.finished; l.queue_free()
+	tw.finished.connect(l.queue_free)
+
+func _show_countdown_timer() -> void:
+	var cl := CanvasLayer.new(); cl.layer = 30; cl.name = "CountdownLayer"; add_child(cl)
+	var bg := ColorRect.new()
+	bg.color = Color(0, 0, 0, 0.7)
+	bg.size = DisplayServer.window_get_size()
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cl.add_child(bg)
+	var label := Label.new()
+	label.add_theme_font_size_override("font_size", 64)
+	label.add_theme_color_override("font_color", Color(1, 0.8, 0.2, 1))
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.position = Vector2(0, 0)
+	label.size = DisplayServer.window_get_size()
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cl.add_child(label)
+	var tick_start: float = 0.12; var tick_end: float = 0.04
+	for i in range(40, 0, -1):
+		label.text = str(i)
+		var t: float = float(40 - i) / 39.0
+		var wait: float = lerp(tick_start, tick_end, t)
+		await get_tree().create_timer(wait).timeout
+	cl.queue_free()
+
+func _show_vn_dialogue(title: String, text: String, duration: float) -> void:
+	var vs := DisplayServer.window_get_size()
+	var vn_layer := CanvasLayer.new()
+	vn_layer.layer = 25; vn_layer.name = "VNDialogue"; add_child(vn_layer)
+	var vn_box := ColorRect.new()
+	vn_box.color = Color(0.05, 0.05, 0.1, 0.9)
+	vn_box.position = Vector2(20, vs.y - 220)
+	vn_box.size = Vector2(vs.x - 40, 200)
+	vn_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vn_layer.add_child(vn_box)
+	var vn_name := Label.new()
+	vn_name.text = title
+	vn_name.add_theme_font_size_override("font_size", 20)
+	vn_name.add_theme_color_override("font_color", Color(0.6, 0.7, 1, 1))
+	vn_name.position = Vector2(40, vs.y - 210)
+	vn_name.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vn_layer.add_child(vn_name)
+	var vn_text := Label.new()
+	vn_text.text = text
+	vn_text.add_theme_font_size_override("font_size", 16)
+	vn_text.add_theme_color_override("font_color", Color(0.9, 0.9, 0.85, 1))
+	vn_text.position = Vector2(40, vs.y - 180)
+	vn_text.size = Vector2(vs.x - 80, 150)
+	vn_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vn_text.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vn_layer.add_child(vn_text)
+	await get_tree().create_timer(duration).timeout
+	vn_layer.queue_free()
 
 func _enter_room(room_idx: int) -> void:
+	if room_idx in _graves_broken:
+		_show_prompt("This grave is already broken. Nothing remains.")
+		return
 	var game := get_node_or_null("/root/Game")
 	if not game:
 		return
+	var betaal_lines := [
+		"Where are you taking me, Mighty Rajan?",
+		"You know it's a long way, Right?",
+		"If you take too long to carry me back, I will fly right off your shoulders.",
+	]
+	await _show_vn_dialogue("Betaal", betaal_lines[randi() % betaal_lines.size()], 3.0)
+	await _show_countdown_timer()
+	await _show_vn_dialogue("Betaal", "Your time is running out, Mighty Rajan!", 2.5)
 	if GridTrans.is_available() and not GridTrans.is_busy():
 		await GridTrans.cover(0.8)
 	var ok := false

@@ -11,12 +11,6 @@ extends CanvasLayer
 @onready var benefits_label: Label = $BenefitsPanel/BenefitsLabel
 @onready var sprint_fill: ColorRect = $SprintFill
 
-var _dist_label: Label
-var _crossroad_markers: Array[ColorRect] = []
-var _initialized: bool = false
-var _track_start: float = 0.0
-var _track_end: float = 12000.0
-
 var warning_shown: bool = false
 
 func _ready() -> void:
@@ -26,70 +20,25 @@ func _ready() -> void:
 	GameManager.bonus_awarded.connect(_on_bonus_awarded)
 	process_mode = PROCESS_MODE_ALWAYS
 
-	_dist_label = Label.new()
-	_dist_label.name = "DistanceLabel"
-	_dist_label.offset_left = 10
-	_dist_label.offset_top = 115
-	_dist_label.offset_right = 230
-	_dist_label.offset_bottom = 135
-	_dist_label.add_theme_font_size_override("font_size", 14)
-	_dist_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	add_child(_dist_label)
-
-func _init_track(forest: Node) -> void:
-	if not forest.has_method("_get_crossroad_position"):
-		return
-	_track_start = 0.0
-	var last_idx = forest.crossroad_count - 1
-	var last_pos = forest._get_crossroad_position(last_idx)
-	_track_end = last_pos.x + 500.0
-
-	for i in range(forest.crossroad_count):
-		var enabled = forest._is_crossroad_enabled(i) if forest.has_method("_is_crossroad_enabled") else true
-		var marker = ColorRect.new()
-		marker.size = Vector2(4, 14)
-		marker.color = Color(0.9, 0.2, 0.2, 1) if enabled else Color(0.3, 0.3, 0.3, 0.3)
-		marker.visible = enabled
-		$MinimapPanel.add_child(marker)
-		_crossroad_markers.append(marker)
-	_initialized = true
-
 func _process(_delta: float) -> void:
 	var forest = get_node_or_null("/root/Game/ForestLevel")
 	if not forest or not forest.player_instance:
 		return
-	if not _initialized:
-		_init_track(forest)
 
 	var player = forest.player_instance
 	var map_left = minimap_line.position.x
 	var map_width = minimap_line.size.x
+	var half = forest.LEVEL_WIDTH * 0.5
 
-	var player_x = player.position.x
-
-	var track_range = _track_end - _track_start
-	if track_range <= 0:
-		track_range = 1.0
-
-	for i in range(_crossroad_markers.size()):
-		var cx = forest.crossroad_start_x + i * forest.crossroad_spacing
-		var t = (cx - _track_start) / track_range
-		var mx = map_left + t * map_width
-		_crossroad_markers[i].position.x = mx - _crossroad_markers[i].size.x / 2
-		_crossroad_markers[i].position.y = minimap_line.position.y - 4
-
-	var pt = (player_x - _track_start) / track_range
+	var pt = (player.position.x + half) / forest.LEVEL_WIDTH
 	var pmx = map_left + pt * map_width - player_marker.size.x / 2
 	player_marker.position.x = clamp(pmx, map_left, map_left + map_width - player_marker.size.x)
 	player_marker.position.y = minimap_line.position.y - 8
 
-	var st = (0.0 - _track_start) / track_range
+	var st = (0.0 + half) / forest.LEVEL_WIDTH
 	spawn_marker.position.x = map_left + st * map_width - spawn_marker.size.x / 2
 
 	sprint_fill.size.x = max(1, player.sprint_energy * 166)
-
-	var dist_m = int(GameManager.max_distance / 10.0)
-	_dist_label.text = "Distance: %dm" % dist_m
 
 func _on_timer_updated(time_left: float) -> void:
 	timer_label.text = GameManager.get_time_remaining_string()
@@ -142,7 +91,6 @@ func _on_puzzle_type_changed(puzzle_type: int) -> void:
 	tween.tween_property(puzzle_type_label, "modulate", Color(1, 1, 1, 1), 1.0)
 
 func set_room_mode(in_room: bool) -> void:
-	_dist_label.visible = not in_room
 	puzzle_type_label.visible = not in_room
 	$Panel.visible = not in_room
 

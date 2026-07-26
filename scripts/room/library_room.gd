@@ -10,7 +10,7 @@ var _player: CharacterBody2D
 var _can_move := false; var _exiting := false; var _stage_hint: Label
 
 var _has_key := false; var _has_book := false; var _has_meat := false; var _has_potion := false
-var _lion_done := false; var _cage_unlocked := false
+var _lion_done := false; var _potion_used := false
 var _bone_bodies: Array[RigidBody2D] = []
 var _rig: Dictionary = {}
 var _walk_time := 0.0
@@ -26,7 +26,6 @@ const PART_FILES := ["part_neck","part_skull","part_arms","part_ribs","part_legs
 const GROUND_FILES := ["ground_neck","ground_skull","ground_arms","ground_ribs","ground_legs","ground_tail"]
 
 var _pedestal_placed := [false, false, false, false, false, false]
-var _potion_used := false
 var _bgm: AudioStreamPlayer
 
 func _ready() -> void:
@@ -98,18 +97,6 @@ func _build_walls() -> void:
 		_solid(Vector2(x + TILE/2, FLOOR_Y/2), Vector2(TILE, FLOOR_Y))
 
 func _build_furniture() -> void:
-	var cage_x: int = 50 * TILE
-	add_child(_r(cage_x-30, FLOOR_Y-48, 60, 48, Color(0.28,0.24,0.18,0.95), 0))
-	add_child(_r(cage_x-24, FLOOR_Y-42, 48, 36, Color(0.1,0.08,0.04,0.95), 0))
-	add_child(_r(cage_x-2, FLOOR_Y-56, 4, 12, Color(0.35,0.3,0.2,0.9), 0))
-	for bx in [cage_x-26, cage_x-16, cage_x-6, cage_x+4, cage_x+14, cage_x+24]:
-		add_child(_r(bx, FLOOR_Y-46, 3, 40, Color(0.3,0.26,0.18,0.85), 0))
-	add_child(_r(cage_x + 36, FLOOR_Y - 64, 12, 64, Color(0.4, 0.3, 0.2, 0.9), -1))
-	for lx in [cage_x + 38, cage_x + 42]:
-		add_child(_r(lx, FLOOR_Y - 52, 4, 8, Color(0.45, 0.35, 0.22, 0.9), -1))
-		add_child(_r(lx, FLOOR_Y - 36, 4, 8, Color(0.45, 0.35, 0.22, 0.9), -1))
-		add_child(_r(lx, FLOOR_Y - 20, 4, 8, Color(0.45, 0.35, 0.22, 0.9), -1))
-
 	var px := 31 * TILE
 	var pt := _tex("res://assets/art/rooms/pedestal.png")
 	if pt:
@@ -121,7 +108,7 @@ func _build_furniture() -> void:
 	ped_solid.add_child(ped_col); add_child(ped_solid)
 
 	var ped_parts := Node2D.new(); ped_parts.name = "PedestalParts"
-	ped_parts.position = Vector2(px, FLOOR_Y - 56); add_child(ped_parts)
+	ped_parts.position = Vector2(px, FLOOR_Y - 120); add_child(ped_parts)
 	for i in 6:
 		var ptex := _tex("res://assets/art/skeleton/%s.png" % PART_FILES[i])
 		if ptex:
@@ -157,7 +144,7 @@ func _make_bone_pickup(item_id: String, tex_path: String, pos: Vector2, idx: int
 func _build_pickups() -> void:
 	var rng = RandomNumberGenerator.new()
 	rng.randomize()
-	for i in 5:
+	for i in 6:
 		var rx = rng.randf_range(3.0, 75.0) * TILE
 		var ry = rng.randf_range(FLOOR_Y - 5.0 * TILE, FLOOR_Y - 1.5 * TILE)
 		_make_bone_pickup(SKELETON_ITEMS[i], "res://assets/art/skeleton/%s.png" % GROUND_FILES[i], Vector2(rx, ry), i)
@@ -177,11 +164,6 @@ func _build_interactables() -> void:
 	var kc := CollisionShape2D.new(); kc.shape = RectangleShape2D.new(); kc.shape.size = Vector2(48, 48)
 	ka.add_child(kc); ka.position = Vector2(19*TILE, FLOOR_Y-28)
 	ka.body_entered.connect(_on_near.bind("key")); add_child(ka)
-
-	var ca := Area2D.new(); ca.name = "CageArea"
-	var cc := CollisionShape2D.new(); cc.shape = RectangleShape2D.new(); cc.shape.size = Vector2(72, 56)
-	ca.add_child(cc); ca.position = Vector2(50*TILE, FLOOR_Y-24)
-	ca.body_entered.connect(_on_near.bind("cage")); add_child(ca)
 
 	var ba := Area2D.new(); ba.name = "BookArea"
 	var bc := CollisionShape2D.new(); bc.shape = RectangleShape2D.new(); bc.shape.size = Vector2(48, 48)
@@ -240,6 +222,17 @@ func _build_interactables() -> void:
 	pa.add_child(pc); pa.position = Vector2(px, FLOOR_Y-28)
 	pa.body_entered.connect(_on_near.bind("pedestal")); add_child(pa)
 
+	var phint := Label.new(); phint.name = "PedestalHint"
+	phint.text = "Right Click the Pedestal"
+	phint.add_theme_font_size_override("font_size", 12)
+	phint.add_theme_color_override("font_color", Color(1, 1, 0, 0.8))
+	phint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	phint.position = Vector2(px - 80, FLOOR_Y - 180)
+	phint.size = Vector2(160, 24)
+	phint.z_index = 10
+	phint.visible = false
+	add_child(phint)
+
 func _spawn_player() -> void:
 	_player = CharacterBody2D.new(); _player.name = "Player"
 	_player.collision_layer = 1; _player.collision_mask = 1
@@ -273,7 +266,8 @@ func _on_near(body: Node, id: String) -> void:
 func _show_prompt(text: String) -> void:
 	var l := Label.new(); l.text = text; l.add_theme_font_size_override("font_size", 14)
 	l.add_theme_color_override("font_color", Color(1,1,0.8)); l.position = Vector2(20, 20); l.z_index = 10; add_child(l)
-	var tw = create_tween(); tw.tween_property(l, "modulate:a", 0.0, 3.0).set_delay(2.0); await tw.finished; l.queue_free()
+	var tw = create_tween(); tw.tween_property(l, "modulate:a", 0.0, 3.0).set_delay(2.0)
+	tw.finished.connect(l.queue_free)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
@@ -286,7 +280,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if _can_move:
 			var mpos := get_global_mouse_position()
 			var bottle := get_node_or_null("FountainBottle") as Sprite2D
-			if bottle and not _has_potion and _near_interact.get("fountain", false) and bottle.global_position.distance_to(mpos) < 28:
+			if bottle and not _has_potion and _near_interact.get("fountain_bottle", false) and bottle.global_position.distance_to(mpos) < 28:
 				_trigger_potion()
 				return
 			for b in _bone_bodies:
@@ -300,26 +294,17 @@ func _unhandled_input(event: InputEvent) -> void:
 				break
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
 		if _can_move and _near_interact.get("pedestal", false):
-			if _lion_done and _has_potion and not _potion_used:
+			if not _lion_done:
+				_place_on_pedestal()
+			elif _lion_done and _has_potion and not _potion_used:
 				_use_potion_on_skeleton()
 			elif _lion_done and not _has_potion and not _potion_used:
 				_show_prompt("You need the Potion of Life from the fountain.")
-			elif not _lion_done:
-				_place_on_pedestal()
 
 func _handle_interact() -> void:
 	if not _has_key and _near_interact.get("key", false):
-		_has_key = true; _show_prompt("Found a rusty key in the statue!")
-		_stage_hint.text = "Got the key! The cage rattles..."
-		return
-	if _near_interact.get("cage", false):
-		if _has_key and not _cage_unlocked:
-			_cage_unlocked = true
-			_make_bone_pickup("skeleton_tail", "res://assets/art/skeleton/ground_tail.png", Vector2(50*TILE, FLOOR_Y - 2*TILE), 5)
-			_show_prompt("Unlocked the cage! The tail bone falls out.")
-			_stage_hint.text = "Cage open! Collect all 6 skeleton parts."
-		elif not _has_key:
-			_show_prompt("The cage is locked. Find a key.")
+		_has_key = true; _show_prompt("Found a rusty key! Maybe it opens something valuable.")
+		_stage_hint.text = "Got the key! Search for more items."
 		return
 	if not _has_book and _near_interact.get("book", false):
 		_has_book = true; _show_prompt("Found an ancient Book on the shelf!")
@@ -329,9 +314,6 @@ func _handle_interact() -> void:
 		_has_meat = true; _show_prompt("Took the fresh Meat!")
 		_stage_hint.text = "Got the Meat! Bring all to the pedestal."
 		return
-	if _near_interact.get("fountain", false) and not _has_potion:
-		_show_prompt("Click the glowing bottle in the fountain.")
-		return
 	if _near_interact.get("pedestal", false):
 		_show_prompt("Right-click to place skeleton parts from inventory.")
 		return
@@ -340,26 +322,6 @@ func _handle_interact() -> void:
 		if _near_interact.get("statue%d" % i, false): near_statue = true
 	if near_statue and not _has_key:
 		_show_prompt("A statue of a Learned Man. He seems to hold something...")
-
-func _trigger_potion() -> void:
-	if _has_potion: return
-	_has_potion = true; _can_move = false
-	_show_prompt("The fountain glows... a bottle emerges!")
-	_stage_hint.text = "Got the Potion of Life!"
-	var bottle := get_node_or_null("FountainBottle") as Sprite2D
-	if bottle: bottle.queue_free()
-	var haze := ColorRect.new(); haze.color = Color(0.5, 0.1, 0.6, 0)
-	haze.size = get_viewport().get_visible_rect().size; haze.z_index = 100
-	haze.mouse_filter = Control.MOUSE_FILTER_IGNORE; add_child(haze)
-	var tw := create_tween()
-	tw.tween_property(haze, "color", Color(0.5, 0.1, 0.6, 0.85), 1.0)
-	await tw.finished
-	GameInventory.add_item("life_potion")
-	await get_tree().create_timer(0.8).timeout
-	var tw2 := create_tween()
-	tw2.tween_property(haze, "color", Color(0.5, 0.1, 0.6, 0), 1.5)
-	await tw2.finished; haze.queue_free()
-	_can_move = true
 
 func _place_on_pedestal() -> void:
 	var idx := -1
@@ -389,56 +351,6 @@ func _place_on_pedestal() -> void:
 	else:
 		_show_prompt("Placed %s! (%d left)" % [_get_part_name(idx), left])
 
-func _use_potion_on_skeleton() -> void:
-	if _potion_used or not _has_potion: return
-	_potion_used = true; _can_move = false
-	GameInventory.remove_item("life_potion")
-	_stage_hint.text = "The Potion of Life shimmers over the skeleton!"
-	var sk := get_node_or_null("SkeletonLion")
-	if sk:
-		var tw := create_tween(); tw.set_parallel(true)
-		tw.tween_property(sk, "modulate", Color(1, 1, 1, 0.6), 0.5)
-		tw.tween_property(sk, "modulate", Color(1, 1, 1, 1), 0.5).set_delay(0.5)
-		for i in 4:
-			var shimmer := ColorRect.new()
-			shimmer.size = Vector2(120 + i * 20, 20 + i * 8)
-			shimmer.position = Vector2(31*TILE - shimmer.size.x/2, FLOOR_Y - 56 - i * 16)
-			shimmer.color = Color(1, 1, 0.8, 0.4 - i * 0.08)
-			shimmer.z_index = 10; shimmer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			add_child(shimmer)
-			var st := create_tween()
-			st.tween_property(shimmer, "modulate", Color(1, 1, 0.8, 0), 0.8).set_delay(i * 0.15)
-			st.tween_callback(shimmer.queue_free)
-		await tw.finished
-		sk.modulate = Color(1, 1, 1, 1)
-	var vs := DisplayServer.window_get_size()
-	var vn_box := ColorRect.new()
-	vn_box.color = Color(0.05, 0.05, 0.1, 0.85)
-	vn_box.position = Vector2(40, vs.y - 140)
-	vn_box.size = Vector2(vs.x - 80, 120)
-	vn_box.z_index = 50; add_child(vn_box)
-	var vn_name := Label.new()
-	vn_name.text = "Sample Character"
-	vn_name.add_theme_font_size_override("font_size", 12)
-	vn_name.add_theme_color_override("font_color", Color(0.6, 0.7, 1, 1))
-	vn_name.position = Vector2(50, vs.y - 132)
-	vn_name.z_index = 51; add_child(vn_name)
-	var vn_text := Label.new()
-	vn_text.text = "Sample dialogue text goes here."
-	vn_text.add_theme_font_size_override("font_size", 14)
-	vn_text.add_theme_color_override("font_color", Color(0.9, 0.9, 0.85, 1))
-	vn_text.position = Vector2(50, vs.y - 112)
-	vn_text.size = Vector2(vs.x - 100, 80)
-	vn_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	vn_text.z_index = 51; add_child(vn_text)
-	await get_tree().create_timer(3.0).timeout
-	vn_box.queue_free(); vn_name.queue_free(); vn_text.queue_free()
-	_stage_hint.text = "The way opens. You emerge from the grave..."
-	if _bgm: _bgm.stop()
-	var tw2 := create_tween(); tw2.tween_property(_player, "modulate", Color(1,1,1,0), 2.0)
-	await tw2.finished
-	_exit_to_gravestone()
-
 func _exit_to_gravestone() -> void:
 	if _exiting: return; _exiting = true
 	if GridTrans.is_available() and not GridTrans.is_busy(): await GridTrans.cover()
@@ -449,20 +361,141 @@ func _get_part_name(i: int) -> String:
 	var names := ["Neck","Skull","Arms","Ribs","Legs","Tail"]
 	return names[i] if i < names.size() else "Part"
 
+func _show_vn_dialogue(title: String, text: String, duration: float) -> void:
+	var vs := DisplayServer.window_get_size()
+	var vn_layer := CanvasLayer.new()
+	vn_layer.layer = 20
+	vn_layer.name = "VNDialogue"
+	add_child(vn_layer)
+	var vn_box := ColorRect.new()
+	vn_box.color = Color(0.05, 0.05, 0.1, 0.9)
+	vn_box.position = Vector2(20, vs.y - 220)
+	vn_box.size = Vector2(vs.x - 40, 200)
+	vn_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vn_layer.add_child(vn_box)
+	var vn_name := Label.new()
+	vn_name.text = title
+	vn_name.add_theme_font_size_override("font_size", 20)
+	vn_name.add_theme_color_override("font_color", Color(0.6, 0.7, 1, 1))
+	vn_name.position = Vector2(40, vs.y - 210)
+	vn_name.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vn_layer.add_child(vn_name)
+	var vn_text := Label.new()
+	vn_text.text = text
+	vn_text.add_theme_font_size_override("font_size", 16)
+	vn_text.add_theme_color_override("font_color", Color(0.9, 0.9, 0.85, 1))
+	vn_text.position = Vector2(40, vs.y - 180)
+	vn_text.size = Vector2(vs.x - 80, 150)
+	vn_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vn_text.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vn_layer.add_child(vn_text)
+	await get_tree().create_timer(duration).timeout
+	vn_layer.queue_free()
+
 func _finish_assembly() -> void:
 	_lion_done = true
-	_stage_hint.text = "The Skeleton Lion awakens!"
-	var sk := preload("res://assets/skeleton_assembly.tscn").instantiate()
-	sk.name = "SkeletonLion"
-	sk.position = Vector2(31*TILE, FLOOR_Y - 220)
-	add_child(sk)
-	await get_tree().create_timer(1.0).timeout
-	if sk.has_method("_on_stand_button_pressed") or sk.get_node_or_null("AnimationPlayer"):
-		var ap := sk.get_node_or_null("AnimationPlayer") as AnimationPlayer
-		if ap and ap.has_animation("stand"):
-			ap.play("stand")
-	_show_prompt("The Skeleton takes shape! Use the Potion of Life on it.")
-	_stage_hint.text = "Right-click the pedestal with the Life Potion."
+	_can_move = false
+	_stage_hint.text = ""
+	await _show_vn_dialogue("???",
+		"I see... You have completed the Beast. Now Only One thing remains...", 4.0)
+	_stage_hint.text = "The lion skeleton assembles before you. It seems to be waiting for something... The fountain shimmers. Get the Potion of Life."
+	_can_move = true
+	_set_fountain_bottle_visible(true)
+
+func _set_fountain_bottle_visible(vis: bool) -> void:
+	var bottle := get_node_or_null("FountainBottle") as Sprite2D
+	if bottle:
+		bottle.modulate = Color(1, 1, 1, 0.9) if vis else Color(1, 1, 1, 0.5)
+
+func _trigger_potion() -> void:
+	if _has_potion: return
+	_has_potion = true
+	var bottle := get_node_or_null("FountainBottle") as Sprite2D
+	if bottle:
+		_set_fountain_bottle_visible(false)
+	_stage_hint.text = "You hold the shimmering Potion of Life. The guardian skeleton awaits..."
+	var popup := ColorRect.new()
+	popup.color = Color(0.0, 0.3, 0.0, 0.6)
+	popup.position = Vector2(300, 300)
+	popup.size = Vector2(280, 60)
+	popup.z_index = 60; add_child(popup)
+	var popup_label := Label.new()
+	popup_label.text = "Got Potion of Life!"
+	popup_label.add_theme_font_size_override("font_size", 18)
+	popup_label.add_theme_color_override("font_color", Color(0.5, 1, 0.5, 1))
+	popup_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	popup_label.position = Vector2(300, 310)
+	popup_label.size = Vector2(280, 40)
+	popup_label.z_index = 61; add_child(popup_label)
+	await get_tree().create_timer(1.5).timeout
+	popup.queue_free(); popup_label.queue_free()
+
+func _use_potion_on_skeleton() -> void:
+	_potion_used = true
+	_can_move = false
+	_stage_hint.text = ""
+
+	var potion_spr := Sprite2D.new()
+	var potion_tex := load("res://assets/art/rooms/lifebottle.png")
+	if potion_tex:
+		potion_spr.texture = potion_tex
+		potion_spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	potion_spr.position = Vector2(31 * TILE, FLOOR_Y - 200)
+	potion_spr.scale = Vector2(2, 2)
+	potion_spr.z_index = 20
+	add_child(potion_spr)
+
+	var tw_appear := create_tween()
+	tw_appear.tween_property(potion_spr, "modulate", Color(1, 1, 1, 1), 0.5).from(Color(1, 1, 1, 0))
+	await tw_appear.finished
+	await get_tree().create_timer(0.5).timeout
+
+	var tw_fade := create_tween()
+	tw_fade.tween_property(potion_spr, "modulate", Color(1, 1, 1, 0), 1.0)
+	tw_fade.parallel().tween_property(potion_spr, "position:y", potion_spr.position.y - 60, 1.0)
+	await tw_fade.finished
+	potion_spr.queue_free()
+
+	await _show_vn_dialogue("Vikram",
+		"No Betaal, I am not going to fall for your tricks. I know that using this potion will awaken the beast", 3.0)
+	await _show_vn_dialogue("Betaal",
+		"Indeed Mighty Rajan, Wisdom has finally blessed you. But in doing so, YOU have spoken up, breaking our deal. Well then, Off I Go!", 4.0)
+
+	var glimmer_particles := GPUParticles2D.new()
+	glimmer_particles.position = Vector2(31 * TILE, FLOOR_Y - 180)
+	glimmer_particles.z_index = 15
+	glimmer_particles.amount = 40
+	glimmer_particles.lifetime = 3.0
+	glimmer_particles.explosiveness = 0.5
+	glimmer_particles.one_shot = true
+	var pmat := ParticleProcessMaterial.new()
+	pmat.direction = Vector3(0, -1, 0)
+	pmat.spread = 180.0
+	pmat.initial_velocity_min = 20.0
+	pmat.initial_velocity_max = 80.0
+	pmat.gravity = Vector3(0, -20, 0)
+	pmat.scale_min = 0.2
+	pmat.scale_max = 0.5
+	pmat.color = Color(1.0, 0.9, 0.6, 0.8)
+	glimmer_particles.process_material = pmat
+	glimmer_particles.emitting = true
+	add_child(glimmer_particles)
+
+	var flash := ColorRect.new()
+	flash.color = Color(1, 1, 1, 0)
+	flash.size = DisplayServer.window_get_size()
+	flash.z_index = 100; add_child(flash)
+	var tw := create_tween()
+	tw.tween_property(flash, "color", Color(1, 1, 1, 0.5), 0.8)
+	tw.tween_property(flash, "color", Color(1, 1, 1, 0), 1.5).set_delay(0.8)
+
+	if _bgm: _bgm.stop()
+	_stage_hint.text = "The lion skeleton bows. The path is open."
+	await get_tree().create_timer(3.0).timeout
+	glimmer_particles.queue_free()
+	flash.queue_free()
+	await get_tree().create_timer(0.5).timeout
+	_exit_to_gravestone()
 
 func _exit_room() -> void:
 	if _exiting: return; _exiting = true; _can_move = false
@@ -486,6 +519,13 @@ func _process(delta: float) -> void:
 				var sprites = l["sprites"]
 				for i in range(sprites.size()):
 					sprites[i].position.x = offset + (i - 1) * l["tex_w"]
+
+	var phint := get_node_or_null("PedestalHint") as Label
+	if phint:
+		var has_any := false
+		for item in SKELETON_ITEMS:
+			if GameInventory.has_item(item): has_any = true; break
+		phint.visible = has_any and _can_move and not _lion_done
 
 	if not _fountain_frames.is_empty() and _fountain_sprite:
 		_fountain_time += delta

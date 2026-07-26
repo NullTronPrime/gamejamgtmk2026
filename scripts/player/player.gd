@@ -6,9 +6,6 @@ extends CharacterBody2D
 @export var friction: float = 800.0
 @export var gravity: float = 1200.0
 
-const MIN_DEPTH: float = 0.0
-const MAX_DEPTH: float = 600.0
-
 var is_carrying_betaal: bool = true
 var is_stopped: bool = false
 var speed_multiplier: float = 1.0
@@ -16,6 +13,11 @@ var _speed_boost_tween: Tween
 
 var height_offset: float = 0.0
 var vertical_vel: float = 0.0
+
+var _is_crouching: bool = false
+var _crouch_tween: Tween
+var _normal_collision_height: float = 56.0
+var _crouch_collision_height: float = 28.0
 
 var _footstep_timer: float = 0.0
 var _footstep_streams: Array = []
@@ -94,10 +96,17 @@ func _physics_process(delta: float) -> void:
 		return
 
 	var h_dir := Input.get_axis("move_left", "move_right")
-	var v_dir := Input.get_axis("move_up", "move_down")
+
+	var crouch_held := Input.is_action_pressed("crouch")
+	if crouch_held and on_ground and not _is_crouching:
+		_is_crouching = true
+		_set_collision_height(_crouch_collision_height)
+	elif not crouch_held and _is_crouching:
+		_is_crouching = false
+		_set_collision_height(_normal_collision_height)
 
 	var sprint_pressed = Input.is_key_pressed(KEY_SHIFT) or Input.is_action_pressed("sprint")
-	var wants_to_sprint = sprint_pressed and (h_dir != 0 or v_dir != 0) and sprint_energy > 0
+	var wants_to_sprint = sprint_pressed and h_dir != 0 and sprint_energy > 0
 
 	if wants_to_sprint:
 		sprint_energy = max(sprint_energy - SPRINT_DEPLETE_RATE * delta, 0.0)
@@ -114,14 +123,9 @@ func _physics_process(delta: float) -> void:
 	else:
 		velocity.x = move_toward(velocity.x, 0.0, friction * delta)
 
-	if v_dir != 0:
-		var target_y = position.y + v_dir * effective_speed * delta
-		target_y = clamp(target_y, MIN_DEPTH, MAX_DEPTH)
-		velocity.y = (target_y - position.y) / delta
-	else:
-		velocity.y = move_toward(velocity.y, 0.0, friction * delta)
+	velocity.y = move_toward(velocity.y, 0.0, friction * delta)
 
-	if Input.is_action_just_pressed("jump") and on_ground:
+	if Input.is_action_just_pressed("jump") and on_ground and not _is_crouching:
 		vertical_vel = jump_velocity
 
 	if not _was_on_ground and on_ground:
@@ -130,8 +134,8 @@ func _physics_process(delta: float) -> void:
 
 	move_and_slide()
 
-	var is_moving = h_dir != 0 or v_dir != 0
-	var is_running = wants_to_sprint or speed_multiplier > 1.0
+	var is_moving = h_dir != 0
+	var is_running = (wants_to_sprint or speed_multiplier > 1.0) and not _is_crouching
 	_animate_rig(delta, is_moving, on_ground, is_running)
 
 	_update_held_item_position()
@@ -276,6 +280,22 @@ func _animate_rig(delta: float, is_moving: bool, on_ground: bool, is_running: bo
 	if _rig.is_empty():
 		return
 
+	if _is_crouching:
+		var crouch_factor = 1.0 - collision.shape.size.y / _normal_collision_height
+		var tuck = deg_to_rad(45.0 * crouch_factor)
+		_rig["l_hip"].rotation = lerp(_rig["l_hip"].rotation, tuck, delta * 12.0)
+		_rig["r_hip"].rotation = lerp(_rig["r_hip"].rotation, tuck, delta * 12.0)
+		_rig["l_knee"].rotation = lerp(_rig["l_knee"].rotation, deg_to_rad(60.0 * crouch_factor), delta * 12.0)
+		_rig["r_knee"].rotation = lerp(_rig["r_knee"].rotation, deg_to_rad(60.0 * crouch_factor), delta * 12.0)
+		_rig["torso"].rotation = lerp(_rig["torso"].rotation, deg_to_rad(10.0 * crouch_factor), delta * 12.0)
+		_rig["head"].rotation = lerp(_rig["head"].rotation, deg_to_rad(-5.0 * crouch_factor), delta * 12.0)
+		if is_moving:
+			_walk_phase += delta * WALK_CYCLE_SPEED * 0.5
+			var c_swing = sin(_walk_phase) * deg_to_rad(15.0 * crouch_factor)
+			_rig["l_shoulder"].rotation = -c_swing
+			_rig["r_shoulder"].rotation = c_swing
+		return
+
 	if _is_punching:
 		var now: float = Time.get_ticks_msec() / 1000.0
 		var elapsed: float = now - _punch_start
@@ -335,3 +355,13 @@ func _animate_rig(delta: float, is_moving: bool, on_ground: bool, is_running: bo
 	else:
 		_rig["torso"].position.y = 0.0
 		_rig["head"].position.y = 0.0
+
+func _set_collision_height(h: float) -> void:
+	if _crouch_tween and _crouch_tween.is_valid():
+		_crouch_tween.kill()
+	_crouch_tween = create_tween()
+	_crouch_tween.tween_method(func(v: float): collision.shape.size.y = v; collision.position.y = -v * 0.5, collision.shape.size.y, h, 0.1)
+	var vis_target = -h * 0.5
+	_crouch_tween.parallel().tween_property(visual, "position:y", vis_target - height_offset, 0.1)
+	if not _is_crouching:
+		_crouch_tween.tween_callback(func(): visual.position.y = -height_offset)
